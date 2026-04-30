@@ -75,8 +75,8 @@ export default function HomePage() {
           </h2>
 
           <div className="mt-6 space-y-3 text-slate-700">
-            <p>• See real profit, not just revenue</p>
-            <p>• Track every expense in one place</p>
+            <p>• See real profit — not just money coming in </p>
+            <p>• Keep all your expenses in one place </p>
             <p>• Match invoices to bank deposits automatically</p>
             <p>• Stop guessing and start making better decisions</p>
           </div>

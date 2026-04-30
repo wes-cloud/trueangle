@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import AppNav from "@/components/AppNav";
-import { supabase } from "@/lib/supabase";
 import OnboardingChecklist from "@/components/OnboardingChecklist";
+import { supabase } from "@/lib/supabase";
 
 type AuthUser = {
   id: string;
@@ -62,8 +62,8 @@ function getBarPercent(value: number, maxValue: number) {
 }
 
 export default function DashboardPage() {
-
   const [loading, setLoading] = useState(true);
+  const [addingSampleData, setAddingSampleData] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [message, setMessage] = useState("");
 
@@ -186,6 +186,139 @@ export default function DashboardPage() {
     loadUser();
   }, []);
 
+  async function handleAddSampleData() {
+    if (!user) return;
+
+    setAddingSampleData(true);
+    setMessage("");
+
+    const sampleInvoices = [
+      {
+        user_id: user.id,
+        amount: 4200,
+        status: "paid",
+      },
+      {
+        user_id: user.id,
+        amount: 5800,
+        status: "paid",
+      },
+      {
+        user_id: user.id,
+        amount: 5000,
+        status: "paid",
+      },
+    ];
+
+    const samplePayments = [
+      {
+        user_id: user.id,
+        amount: 4200,
+        match_status: "matched",
+      },
+      {
+        user_id: user.id,
+        amount: 5800,
+        match_status: "matched",
+      },
+      {
+        user_id: user.id,
+        amount: 5000,
+        match_status: "matched",
+      },
+    ];
+
+    const sampleExpenses = [
+      {
+        user_id: user.id,
+        amount: 1250,
+        category: "Materials",
+      },
+      {
+        user_id: user.id,
+        amount: 950,
+        category: "Materials",
+      },
+      {
+        user_id: user.id,
+        amount: 725,
+        category: "Fuel",
+      },
+      {
+        user_id: user.id,
+        amount: 680,
+        category: "Tools",
+      },
+      {
+        user_id: user.id,
+        amount: 540,
+        category: "Dump Fees",
+      },
+      {
+        user_id: user.id,
+        amount: 825,
+        category: "Labor",
+      },
+      {
+        user_id: user.id,
+        amount: 610,
+        category: "Supplies",
+      },
+      {
+        user_id: user.id,
+        amount: 500,
+        category: "Equipment Rental",
+      },
+      {
+        user_id: user.id,
+        amount: 470,
+        category: "Permits",
+      },
+      {
+        user_id: user.id,
+        amount: 450,
+        category: "Insurance",
+      },
+    ];
+
+    const { error: invoiceError } = await supabase
+      .from("invoices")
+      .insert(sampleInvoices);
+
+    if (invoiceError) {
+      setMessage(`Error adding sample invoices: ${invoiceError.message}`);
+      setAddingSampleData(false);
+      return;
+    }
+
+    const { error: paymentError } = await supabase
+      .from("payments")
+      .insert(samplePayments);
+
+    if (paymentError) {
+      setMessage(`Error adding sample payments: ${paymentError.message}`);
+      setAddingSampleData(false);
+      return;
+    }
+
+    const { error: expenseError } = await supabase
+      .from("expenses")
+      .insert(sampleExpenses);
+
+    if (expenseError) {
+      setMessage(`Error adding sample expenses: ${expenseError.message}`);
+      setAddingSampleData(false);
+      return;
+    }
+
+    await loadDashboard(user.id);
+
+    setMessage(
+      "Sample data added. Now this thing actually has some numbers to look at."
+    );
+    setAddingSampleData(false);
+  }
+
   async function handleSignOut() {
     const { error } = await supabase.auth.signOut();
 
@@ -286,6 +419,9 @@ export default function DashboardPage() {
     1
   );
 
+  const hasAnyBusinessData =
+    expenses.length > 0 || invoices.length > 0 || payments.length > 0;
+
   if (loading) {
     return (
       <main className="min-h-screen bg-slate-100 p-8">
@@ -313,9 +449,37 @@ export default function DashboardPage() {
     <main className="min-h-screen bg-slate-100 p-8 text-slate-950">
       <AppNav onSignOut={handleSignOut} />
 
-<OnboardingChecklist />
-
       <div className="mx-auto max-w-7xl space-y-8">
+        <OnboardingChecklist />
+
+        {!hasAnyBusinessData && (
+          <section className="rounded-3xl bg-slate-950 p-8 text-white shadow-sm">
+            <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm font-bold uppercase tracking-wide text-slate-300">
+                  New here?
+                </p>
+                <h2 className="mt-2 text-2xl font-black">
+                  Add sample numbers and see how this thing works.
+                </h2>
+                <p className="mt-2 max-w-2xl text-sm font-medium text-slate-300">
+                  We’ll add 3 paid invoices and 10 expenses so your dashboard
+                  shows real revenue, expenses, and profit instead of a big pile
+                  of zeros.
+                </p>
+              </div>
+
+              <button
+                onClick={handleAddSampleData}
+                disabled={addingSampleData}
+                className="rounded-xl bg-white px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {addingSampleData ? "Adding..." : "Add Sample Data"}
+              </button>
+            </div>
+          </section>
+        )}
+
         <section className="rounded-3xl bg-gradient-to-r from-white to-slate-50 p-8 shadow-sm ring-1 ring-slate-200">
           <p className="text-sm font-semibold uppercase tracking-wide text-slate-600">
             TrueAngle Dashboard
@@ -403,32 +567,32 @@ export default function DashboardPage() {
               </p>
             ) : (
               <div className="mt-6 space-y-4">
-{expenseBreakdown.map((item) => {
-  const percent =
-    totals.totalExpenses > 0
-      ? Math.round((item.amount / totals.totalExpenses) * 100)
-      : 0;
+                {expenseBreakdown.map((item) => {
+                  const percent =
+                    totals.totalExpenses > 0
+                      ? Math.round((item.amount / totals.totalExpenses) * 100)
+                      : 0;
 
-  return (
-    <div key={item.category} className="space-y-1">
-      <div className="flex justify-between text-sm font-bold text-slate-800">
-        <span>{item.category}</span>
-        <span>
-          {formatCurrency(item.amount)} ({percent}%)
-        </span>
-      </div>
+                  return (
+                    <div key={item.category} className="space-y-1">
+                      <div className="flex justify-between text-sm font-bold text-slate-800">
+                        <span>{item.category}</span>
+                        <span>
+                          {formatCurrency(item.amount)} ({percent}%)
+                        </span>
+                      </div>
 
-      <div className="h-4 overflow-hidden rounded-full bg-slate-100">
-        <div
-          className="h-full rounded-full bg-slate-900"
-          style={{
-            width: `${percent}%`,
-          }}
-        />
-      </div>
-    </div>
-  );
-})}
+                      <div className="h-4 overflow-hidden rounded-full bg-slate-100">
+                        <div
+                          className="h-full rounded-full bg-slate-900"
+                          style={{
+                            width: `${percent}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
