@@ -5,17 +5,16 @@ import { supabase } from "@/lib/supabase";
 
 export default function AuthPage() {
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
-    setMessage("Sending sign-in link...");
+    setMessage("Signing in...");
 
-    const { error } = await supabase.auth.signInWithOtp({
+    const { error } = await supabase.auth.signInWithPassword({
       email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/dashboard`,
-      },
+      password,
     });
 
     if (error) {
@@ -23,7 +22,7 @@ export default function AuthPage() {
       return;
     }
 
-    setMessage("Check your email for the sign-in link.");
+    window.location.href = "/dashboard";
   }
 
   return (
@@ -41,8 +40,17 @@ export default function AuthPage() {
             className="w-full rounded-xl border border-slate-300 p-3"
           />
 
+          <input
+            type="password"
+            required
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full rounded-xl border border-slate-300 p-3"
+          />
+
           <button className="w-full rounded-xl bg-black px-5 py-3 font-bold text-white">
-            Send Sign-In Link
+            Sign In
           </button>
         </form>
 
