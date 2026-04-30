@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import AppNav from "@/components/AppNav";
 import { supabase } from "@/lib/supabase";
+import OnboardingChecklist from "@/components/OnboardingChecklist";
 
 type AuthUser = {
   id: string;
@@ -61,6 +62,7 @@ function getBarPercent(value: number, maxValue: number) {
 }
 
 export default function DashboardPage() {
+
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [message, setMessage] = useState("");
@@ -310,6 +312,8 @@ export default function DashboardPage() {
   return (
     <main className="min-h-screen bg-slate-100 p-8 text-slate-950">
       <AppNav onSignOut={handleSignOut} />
+
+<OnboardingChecklist />
 
       <div className="mx-auto max-w-7xl space-y-8">
         <section className="rounded-3xl bg-gradient-to-r from-white to-slate-50 p-8 shadow-sm ring-1 ring-slate-200">
