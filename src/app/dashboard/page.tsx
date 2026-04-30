@@ -186,138 +186,77 @@ export default function DashboardPage() {
     loadUser();
   }, []);
 
-  async function handleAddSampleData() {
-    if (!user) return;
+async function handleAddSampleData() {
+  if (!user) return;
 
-    setAddingSampleData(true);
-    setMessage("");
+  setAddingSampleData(true);
+  setMessage("");
 
-    const sampleInvoices = [
-      {
-        user_id: user.id,
-        amount: 4200,
-        status: "paid",
-      },
-      {
-        user_id: user.id,
-        amount: 5800,
-        status: "paid",
-      },
-      {
-        user_id: user.id,
-        amount: 5000,
-        status: "paid",
-      },
-    ];
+  const sampleInvoices = [
+    { user_id: user.id, amount: 4200, status: "paid" },
+    { user_id: user.id, amount: 5800, status: "paid" },
+    { user_id: user.id, amount: 5000, status: "paid" },
+  ];
 
-    const samplePayments = [
-      {
-        user_id: user.id,
-        amount: 4200,
-        match_status: "matched",
-      },
-      {
-        user_id: user.id,
-        amount: 5800,
-        match_status: "matched",
-      },
-      {
-        user_id: user.id,
-        amount: 5000,
-        match_status: "matched",
-      },
-    ];
+  const sampleExpenses = [
+    { user_id: user.id, amount: 1250, category: "Materials" },
+    { user_id: user.id, amount: 950, category: "Materials" },
+    { user_id: user.id, amount: 725, category: "Fuel" },
+    { user_id: user.id, amount: 680, category: "Tools" },
+    { user_id: user.id, amount: 540, category: "Dump Fees" },
+    { user_id: user.id, amount: 825, category: "Labor" },
+    { user_id: user.id, amount: 610, category: "Supplies" },
+    { user_id: user.id, amount: 500, category: "Equipment Rental" },
+    { user_id: user.id, amount: 470, category: "Permits" },
+    { user_id: user.id, amount: 450, category: "Insurance" },
+  ];
 
-    const sampleExpenses = [
-      {
-        user_id: user.id,
-        amount: 1250,
-        category: "Materials",
-      },
-      {
-        user_id: user.id,
-        amount: 950,
-        category: "Materials",
-      },
-      {
-        user_id: user.id,
-        amount: 725,
-        category: "Fuel",
-      },
-      {
-        user_id: user.id,
-        amount: 680,
-        category: "Tools",
-      },
-      {
-        user_id: user.id,
-        amount: 540,
-        category: "Dump Fees",
-      },
-      {
-        user_id: user.id,
-        amount: 825,
-        category: "Labor",
-      },
-      {
-        user_id: user.id,
-        amount: 610,
-        category: "Supplies",
-      },
-      {
-        user_id: user.id,
-        amount: 500,
-        category: "Equipment Rental",
-      },
-      {
-        user_id: user.id,
-        amount: 470,
-        category: "Permits",
-      },
-      {
-        user_id: user.id,
-        amount: 450,
-        category: "Insurance",
-      },
-    ];
+  const { data: createdInvoices, error: invoiceError } = await supabase
+    .from("invoices")
+    .insert(sampleInvoices)
+    .select("id, amount");
 
-    const { error: invoiceError } = await supabase
-      .from("invoices")
-      .insert(sampleInvoices);
-
-    if (invoiceError) {
-      setMessage(`Error adding sample invoices: ${invoiceError.message}`);
-      setAddingSampleData(false);
-      return;
-    }
-
-    const { error: paymentError } = await supabase
-      .from("payments")
-      .insert(samplePayments);
-
-    if (paymentError) {
-      setMessage(`Error adding sample payments: ${paymentError.message}`);
-      setAddingSampleData(false);
-      return;
-    }
-
-    const { error: expenseError } = await supabase
-      .from("expenses")
-      .insert(sampleExpenses);
-
-    if (expenseError) {
-      setMessage(`Error adding sample expenses: ${expenseError.message}`);
-      setAddingSampleData(false);
-      return;
-    }
-
-    await loadDashboard(user.id);
-
-    setMessage(
-      "Sample data added. Now this thing actually has some numbers to look at."
-    );
+  if (invoiceError) {
+    setMessage(`Error adding sample invoices: ${invoiceError.message}`);
     setAddingSampleData(false);
+    return;
   }
+
+  const samplePayments = (createdInvoices || []).map((invoice) => ({
+    user_id: user.id,
+    invoice_id: invoice.id,
+    amount: invoice.amount,
+    match_status: "matched",
+  }));
+
+  const { error: paymentError } = await supabase
+    .from("payments")
+    .insert(samplePayments);
+
+  if (paymentError) {
+    setMessage(`Error adding sample payments: ${paymentError.message}`);
+    setAddingSampleData(false);
+    return;
+  }
+
+  const { error: expenseError } = await supabase
+    .from("expenses")
+    .insert(sampleExpenses);
+
+  if (expenseError) {
+    setMessage(`Error adding sample expenses: ${expenseError.message}`);
+    setAddingSampleData(false);
+    return;
+  }
+
+  await loadDashboard(user.id);
+
+  setMessage(
+    "Sample data added. Revenue: $15,000. Expenses: $7,000. Profit: $8,000."
+  );
+
+  setAddingSampleData(false);
+}
 
   async function handleSignOut() {
     const { error } = await supabase.auth.signOut();
