@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabase";
 
 type SubscriptionStatus = "loading" | "allowed" | "blocked" | "signed-out";
 
-const PUBLIC_PATHS = ["/", "/start-trial", "/auth"];
+const PUBLIC_PATHS = ["/", "/start-trial", "/auth", "/trial-success"];
 
 export default function SubscriptionGate({
   children,

@@ -81,7 +81,7 @@ export async function POST(request: Request) {
       metadata: {
         user_id: userId,
       },
-      success_url: `${process.env.NEXT_PUBLIC_SITE_URL}/dashboard?trial=success`,
+      success_url: `${process.env.NEXT_PUBLIC_SITE_URL}/trial-success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${process.env.NEXT_PUBLIC_SITE_URL}/?trial=canceled`,
     });
 

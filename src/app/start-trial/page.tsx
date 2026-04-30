@@ -38,6 +38,11 @@ export default function StartTrialPage() {
       return;
     }
 
+    sessionStorage.setItem(
+  "trueangle_pending_login",
+  JSON.stringify({ email, password })
+);
+
     window.location.href = data.url;
   }
 
