@@ -15,10 +15,10 @@ export default function LandingPage() {
 
           <div className="flex items-center gap-3">
             <Link
-              href="/dashboard"
+              href="/auth"
               className="rounded-xl border border-white/20 px-4 py-2 text-sm font-bold text-white hover:bg-white/10"
             >
-              Dashboard
+              Sign In
             </Link>
 
             <Link
@@ -56,10 +56,10 @@ export default function LandingPage() {
               </Link>
 
               <Link
-                href="/dashboard"
+                href="/auth"
                 className="rounded-2xl border border-white/20 px-6 py-4 text-center text-base font-black text-white hover:bg-white/10"
               >
-                Go to Dashboard
+                Sign In
               </Link>
             </div>
 
