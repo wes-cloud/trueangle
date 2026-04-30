@@ -31,12 +31,11 @@ export default function HomePage() {
       {/* HERO */}
       <section className="mx-auto max-w-4xl px-6 py-20 text-center">
         <h1 className="text-4xl font-black leading-tight md:text-5xl">
-          Know exactly how much profit you made on every job
+          Know exactly if you’re making money on your jobs
         </h1>
 
         <p className="mt-6 text-lg text-slate-600">
-          Track expenses, invoices, and real profit in one simple dashboard —
-          built for contractors.
+          Track expenses, invoices, and real profit in one place — without the guesswork.
         </p>
 
         <div className="mt-8">
