@@ -3,13 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import AppNav from "@/components/AppNav";
 import OnboardingChecklist from "@/components/OnboardingChecklist";
-import { supabase } from "@/lib/supabase";
 import TrialBanner from "@/components/TrialBanner";
+import { supabase } from "@/lib/supabase";
 
 type AuthUser = {
   id: string;
   email?: string | null;
 };
+
+type CompanyRole = "owner" | "bookkeeper" | "viewer" | null;
 
 type Expense = {
   id: string;
@@ -68,6 +70,10 @@ export default function DashboardPage() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [message, setMessage] = useState("");
 
+  const [companyId, setCompanyId] = useState<string | null>(null);
+  const [companyRole, setCompanyRole] = useState<CompanyRole>(null);
+  const [companyUserIds, setCompanyUserIds] = useState<string[]>([]);
+
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [income, setIncome] = useState<Income[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -75,84 +81,112 @@ export default function DashboardPage() {
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [transactions, setTransactions] = useState<PlaidTransaction[]>([]);
 
+  async function getCompanyAccess(currentUserId: string) {
+    const { data: membership, error: membershipError } = await supabase
+      .from("company_members")
+      .select("company_id, role")
+      .eq("user_id", currentUserId)
+      .maybeSingle();
+
+    if (membershipError) {
+      throw new Error(membershipError.message);
+    }
+
+    if (!membership?.company_id) {
+      return {
+        companyId: null,
+        role: null as CompanyRole,
+        userIds: [currentUserId],
+      };
+    }
+
+    const { data: members, error: membersError } = await supabase
+      .from("company_members")
+      .select("user_id")
+      .eq("company_id", membership.company_id);
+
+    if (membersError) {
+      throw new Error(membersError.message);
+    }
+
+    const userIds =
+      members?.map((member) => member.user_id).filter(Boolean) || [
+        currentUserId,
+      ];
+
+    return {
+      companyId: membership.company_id as string,
+      role: (membership.role || null) as CompanyRole,
+      userIds,
+    };
+  }
+
   async function loadDashboard(currentUserId: string) {
-    const [
-      { data: expensesData, error: expensesError },
-      { data: incomeData, error: incomeError },
-      { data: paymentsData, error: paymentsError },
-      { data: invoicesData, error: invoicesError },
-      { data: estimatesData, error: estimatesError },
-      { data: transactionsData, error: transactionsError },
-    ] = await Promise.all([
-      supabase
-        .from("expenses")
-        .select("id, amount, category")
-        .eq("user_id", currentUserId),
+    try {
+      const access = await getCompanyAccess(currentUserId);
 
-      supabase
-        .from("income")
-        .select("id, amount, match_status")
-        .eq("user_id", currentUserId),
+      setCompanyId(access.companyId);
+      setCompanyRole(access.role);
+      setCompanyUserIds(access.userIds);
 
-      supabase
-        .from("payments")
-        .select("id, amount, match_status")
-        .eq("user_id", currentUserId),
+      const [
+        { data: expensesData, error: expensesError },
+        { data: incomeData, error: incomeError },
+        { data: paymentsData, error: paymentsError },
+        { data: invoicesData, error: invoicesError },
+        { data: estimatesData, error: estimatesError },
+        { data: transactionsData, error: transactionsError },
+      ] = await Promise.all([
+        supabase
+          .from("expenses")
+          .select("id, amount, category")
+          .in("user_id", access.userIds),
 
-      supabase
-        .from("invoices")
-        .select("id, amount, status")
-        .eq("user_id", currentUserId),
+        supabase
+          .from("income")
+          .select("id, amount, match_status")
+          .in("user_id", access.userIds),
 
-      supabase
-        .from("estimates")
-        .select("id, amount, status")
-        .eq("user_id", currentUserId),
+        supabase
+          .from("payments")
+          .select("id, amount, match_status")
+          .in("user_id", access.userIds),
 
-      supabase
-        .from("plaid_transactions")
-        .select(
-          "id, amount, imported_to_expenses, imported_to_income, ignored, match_status"
-        )
-        .eq("user_id", currentUserId),
-    ]);
+        supabase
+          .from("invoices")
+          .select("id, amount, status")
+          .in("user_id", access.userIds),
 
-    if (expensesError) {
-      setMessage(`Error loading expenses: ${expensesError.message}`);
-      return;
+        supabase
+          .from("estimates")
+          .select("id, amount, status")
+          .in("user_id", access.userIds),
+
+        supabase
+          .from("plaid_transactions")
+          .select(
+            "id, amount, imported_to_expenses, imported_to_income, ignored, match_status"
+          )
+          .in("user_id", access.userIds),
+      ]);
+
+      if (expensesError) throw new Error(`Error loading expenses: ${expensesError.message}`);
+      if (incomeError) throw new Error(`Error loading income: ${incomeError.message}`);
+      if (paymentsError) throw new Error(`Error loading payments: ${paymentsError.message}`);
+      if (invoicesError) throw new Error(`Error loading invoices: ${invoicesError.message}`);
+      if (estimatesError) throw new Error(`Error loading estimates: ${estimatesError.message}`);
+      if (transactionsError) throw new Error(`Error loading bank transactions: ${transactionsError.message}`);
+
+      setExpenses((expensesData || []) as Expense[]);
+      setIncome((incomeData || []) as Income[]);
+      setPayments((paymentsData || []) as Payment[]);
+      setInvoices((invoicesData || []) as Invoice[]);
+      setEstimates((estimatesData || []) as Estimate[]);
+      setTransactions((transactionsData || []) as PlaidTransaction[]);
+    } catch (err) {
+      const error = err as Error;
+      setMessage(error.message);
     }
-
-    if (incomeError) {
-      setMessage(`Error loading income: ${incomeError.message}`);
-      return;
-    }
-
-    if (paymentsError) {
-      setMessage(`Error loading payments: ${paymentsError.message}`);
-      return;
-    }
-
-    if (invoicesError) {
-      setMessage(`Error loading invoices: ${invoicesError.message}`);
-      return;
-    }
-
-    if (estimatesError) {
-      setMessage(`Error loading estimates: ${estimatesError.message}`);
-      return;
-    }
-
-    if (transactionsError) {
-      setMessage(`Error loading bank transactions: ${transactionsError.message}`);
-      return;
-    }
-
-    setExpenses((expensesData || []) as Expense[]);
-    setIncome((incomeData || []) as Income[]);
-    setPayments((paymentsData || []) as Payment[]);
-    setInvoices((invoicesData || []) as Invoice[]);
-    setEstimates((estimatesData || []) as Estimate[]);
-    setTransactions((transactionsData || []) as PlaidTransaction[]);
   }
 
   useEffect(() => {
@@ -188,7 +222,7 @@ export default function DashboardPage() {
   }, []);
 
   async function handleAddSampleData() {
-    if (!user) return;
+    if (!user || companyRole !== "owner") return;
 
     setWorkingSampleData(true);
     setMessage("");
@@ -260,7 +294,7 @@ export default function DashboardPage() {
   }
 
   async function handleClearSampleData() {
-    if (!user) return;
+    if (!user || companyRole !== "owner") return;
 
     setWorkingSampleData(true);
     setMessage("");
@@ -407,6 +441,8 @@ export default function DashboardPage() {
   const hasFullSampleStyleData =
     expenses.length > 0 && invoices.length > 0 && payments.length > 0;
 
+  const canManageSampleData = companyRole === "owner";
+
   if (loading) {
     return (
       <main className="min-h-screen bg-slate-100 p-8">
@@ -438,63 +474,73 @@ export default function DashboardPage() {
       <div className="mx-auto max-w-7xl space-y-8">
         <OnboardingChecklist />
 
-        <section className="rounded-3xl bg-slate-950 p-8 text-white shadow-sm">
-  <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-    <div>
-      <p className="text-sm font-bold uppercase tracking-wide text-slate-300">
-        {hasFullSampleStyleData ? "Your turn" : "New here?"}
-      </p>
+        {companyRole && companyRole !== "owner" && (
+          <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+            <p className="text-sm font-semibold text-slate-900">
+              You’re viewing this company as a {companyRole}. Billing and owner-only tools are hidden.
+            </p>
+          </section>
+        )}
 
-      <h2 className="mt-2 text-2xl font-black">
-        {hasFullSampleStyleData
-          ? "Now run it with your real numbers."
-          : "Kick the tires without wrecking your real numbers."}
-      </h2>
+        {canManageSampleData && (
+          <section className="rounded-3xl bg-slate-950 p-8 text-white shadow-sm">
+            <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm font-bold uppercase tracking-wide text-slate-300">
+                  {hasFullSampleStyleData ? "Your turn" : "New here?"}
+                </p>
 
-      <p className="mt-2 max-w-2xl text-sm font-medium text-slate-300">
-        {hasFullSampleStyleData
-          ? "The sample numbers show how TrueAngle works. Now add a real expense or create a real invoice so you can see what your jobs are actually making."
-          : "Add sample invoices, payments, and expenses so the dashboard actually shows how TrueAngle works. Clear it when you’re ready to run your real business through it."}
-      </p>
-    </div>
+                <h2 className="mt-2 text-2xl font-black">
+                  {hasFullSampleStyleData
+                    ? "Now run it with your real numbers."
+                    : "Kick the tires without wrecking your real numbers."}
+                </h2>
 
-    <div className="flex flex-col gap-3 sm:flex-row">
-      {!hasFullSampleStyleData ? (
-        <button
-          onClick={handleAddSampleData}
-          disabled={workingSampleData}
-          className="rounded-xl bg-white px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {workingSampleData ? "Working..." : "Add Sample Data"}
-        </button>
-      ) : (
-        <>
-          <a
-            href="/dashboard/expenses"
-            className="rounded-xl bg-white px-5 py-3 text-center text-sm font-black text-slate-950 transition hover:bg-slate-200"
-          >
-            Add Real Expense
-          </a>
+                <p className="mt-2 max-w-2xl text-sm font-medium text-slate-300">
+                  {hasFullSampleStyleData
+                    ? "The sample numbers show how TrueAngle works. Now add a real expense or create a real invoice so you can see what your jobs are actually making."
+                    : "Add sample invoices, payments, and expenses so the dashboard actually shows how TrueAngle works. Clear it when you’re ready to run your real business through it."}
+                </p>
+              </div>
 
-          <a
-            href="/dashboard/invoices"
-            className="rounded-xl bg-white px-5 py-3 text-center text-sm font-black text-slate-950 transition hover:bg-slate-200"
-          >
-            Create Real Invoice
-          </a>
-        </>
-      )}
+              <div className="flex flex-col gap-3 sm:flex-row">
+                {!hasFullSampleStyleData ? (
+                  <button
+                    onClick={handleAddSampleData}
+                    disabled={workingSampleData}
+                    className="rounded-xl bg-white px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {workingSampleData ? "Working..." : "Add Sample Data"}
+                  </button>
+                ) : (
+                  <>
+                    <a
+                      href="/dashboard/expenses"
+                      className="rounded-xl bg-white px-5 py-3 text-center text-sm font-black text-slate-950 transition hover:bg-slate-200"
+                    >
+                      Add Real Expense
+                    </a>
 
-      <button
-        onClick={handleClearSampleData}
-        disabled={workingSampleData}
-        className="rounded-xl border border-white/30 px-5 py-3 text-sm font-black text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {workingSampleData ? "Working..." : "Clear Sample Data"}
-      </button>
-    </div>
-  </div>
-</section>
+                    <a
+                      href="/dashboard/invoices"
+                      className="rounded-xl bg-white px-5 py-3 text-center text-sm font-black text-slate-950 transition hover:bg-slate-200"
+                    >
+                      Create Real Invoice
+                    </a>
+                  </>
+                )}
+
+                <button
+                  onClick={handleClearSampleData}
+                  disabled={workingSampleData}
+                  className="rounded-xl border border-white/30 px-5 py-3 text-sm font-black text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {workingSampleData ? "Working..." : "Clear Sample Data"}
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
 
         <section className="rounded-3xl bg-gradient-to-r from-white to-slate-50 p-8 shadow-sm ring-1 ring-slate-200">
           <p className="text-sm font-semibold uppercase tracking-wide text-slate-600">
@@ -507,6 +553,11 @@ export default function DashboardPage() {
             Revenue counts invoice payments plus unmatched income deposits, so
             matched bank deposits do not double count.
           </p>
+          {companyId && (
+            <p className="mt-3 text-xs font-semibold text-slate-500">
+              Company access active.
+            </p>
+          )}
         </section>
 
         {message && (
