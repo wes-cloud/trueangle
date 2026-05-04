@@ -136,46 +136,54 @@ export default function SettingsPage() {
     }
   }
 
-  async function getOrCreateCompany(currentUser: AuthUser) {
-const { data: memberships } = await supabase
-  .from("company_members")
-  .select("company_id, role")
-  .eq("user_id", currentUser.id)
-  .limit(1);
+async function getOrCreateCompany(currentUser: AuthUser) {
+  const { data: memberships } = await supabase
+    .from("company_members")
+    .select("company_id, role")
+    .eq("user_id", currentUser.id)
+    .limit(1);
 
-const membership = memberships?.[0];
+  const membership = memberships?.[0];
 
-if (membership?.role) {
-  setCompanyRole(membership.role);
-}
-
-    const { data: newCompany, error: companyError } = await supabase
-      .from("companies")
-      .insert({
-        owner_id: currentUser.id,
-        name: "My Company",
-      })
-      .select("id")
-      .single();
-
-    if (companyError || !newCompany) {
-      throw new Error(companyError?.message || "Could not create company.");
+  // ✅ If already in a company → use it
+  if (membership?.company_id) {
+    if (membership.role) {
+      setCompanyRole(membership.role);
     }
 
-    const { error: memberError } = await supabase
-      .from("company_members")
-      .insert({
-        company_id: newCompany.id,
-        user_id: currentUser.id,
-        role: "owner",
-      });
-
-    if (memberError) {
-      throw new Error(memberError.message);
-    }
-
-    return newCompany.id as string;
+    return membership.company_id;
   }
+
+  // 🆕 Otherwise create new company
+  const { data: newCompany, error: companyError } = await supabase
+    .from("companies")
+    .insert({
+      owner_id: currentUser.id,
+      name: "My Company",
+    })
+    .select("id")
+    .single();
+
+  if (companyError || !newCompany) {
+    throw new Error(companyError?.message || "Could not create company.");
+  }
+
+  const { error: memberError } = await supabase
+    .from("company_members")
+    .insert({
+      company_id: newCompany.id,
+      user_id: currentUser.id,
+      role: "owner",
+    });
+
+  if (memberError) {
+    throw new Error(memberError.message);
+  }
+
+  setCompanyRole("owner");
+
+  return newCompany.id;
+}
 
   async function loadSettings(currentUser: AuthUser) {
     try {
@@ -430,6 +438,39 @@ if (membership?.role) {
       </main>
     );
   }
+
+  if (companyRole && companyRole !== "owner") {
+  return (
+    <main className="min-h-screen bg-slate-100 p-6 text-slate-950">
+      <AppNav onSignOut={handleSignOut} />
+
+      <div className="mx-auto max-w-3xl">
+        <section className="rounded-2xl bg-white p-8 shadow">
+          <p className="text-sm font-semibold uppercase tracking-wide text-slate-600">
+            TrueAngle
+          </p>
+
+          <h1 className="mt-2 text-3xl font-bold text-slate-950">
+            Settings are owner-only
+          </h1>
+
+          <p className="mt-3 text-slate-700">
+            You’re signed in as a {companyRole}. You can help with bookkeeping,
+            expenses, transactions, and reports — but billing, company settings,
+            and user access are controlled by the company owner.
+          </p>
+
+          <a
+            href="/dashboard"
+            className="mt-6 inline-block rounded-lg bg-slate-950 px-5 py-3 font-semibold text-white hover:bg-slate-800"
+          >
+            Back to Dashboard
+          </a>
+        </section>
+      </div>
+    </main>
+  );
+}
 
   return (
     <main className="min-h-screen bg-slate-100 p-6 text-slate-950">
