@@ -68,9 +68,12 @@ export default function SettingsPage() {
     try {
       setMessage("Opening billing portal...");
 
-      const res = await fetch("/api/stripe/portal", {
-        method: "POST",
-      });
+const res = await fetch("/api/stripe/portal", {
+  method: "POST",
+  body: JSON.stringify({
+    userId: user?.id,
+  }),
+});
 
       const data = await res.json();
 
