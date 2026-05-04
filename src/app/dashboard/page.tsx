@@ -81,45 +81,45 @@ export default function DashboardPage() {
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [transactions, setTransactions] = useState<PlaidTransaction[]>([]);
 
-  async function getCompanyAccess(currentUserId: string) {
-    const { data: membership, error: membershipError } = await supabase
-      .from("company_members")
-      .select("company_id, role")
-      .eq("user_id", currentUserId)
-      .maybeSingle();
+async function getCompanyAccess(currentUserId: string) {
+  const { data: memberships, error: membershipError } = await supabase
+    .from("company_members")
+    .select("company_id, role")
+    .eq("user_id", currentUserId)
+    .limit(1);
 
-    if (membershipError) {
-      throw new Error(membershipError.message);
-    }
+  if (membershipError) {
+    throw new Error(membershipError.message);
+  }
 
-    if (!membership?.company_id) {
-      return {
-        companyId: null,
-        role: null as CompanyRole,
-        userIds: [currentUserId],
-      };
-    }
+  const membership = memberships?.[0];
 
-    const { data: members, error: membersError } = await supabase
-      .from("company_members")
-      .select("user_id")
-      .eq("company_id", membership.company_id);
-
-    if (membersError) {
-      throw new Error(membersError.message);
-    }
-
-    const userIds =
-      members?.map((member) => member.user_id).filter(Boolean) || [
-        currentUserId,
-      ];
-
+  if (!membership?.company_id) {
     return {
-      companyId: membership.company_id as string,
-      role: (membership.role || null) as CompanyRole,
-      userIds,
+      companyId: null,
+      role: "owner" as CompanyRole,
+      userIds: [currentUserId],
     };
   }
+
+  const { data: members, error: membersError } = await supabase
+    .from("company_members")
+    .select("user_id")
+    .eq("company_id", membership.company_id);
+
+  if (membersError) {
+    throw new Error(membersError.message);
+  }
+
+  const userIds =
+    members?.map((member) => member.user_id).filter(Boolean) || [currentUserId];
+
+  return {
+    companyId: membership.company_id as string,
+    role: (membership.role || "owner") as CompanyRole,
+    userIds,
+  };
+}
 
   async function loadDashboard(currentUserId: string) {
     try {
