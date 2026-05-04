@@ -63,7 +63,7 @@ function getBarPercent(value: number, maxValue: number) {
 
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
-  const [addingSampleData, setAddingSampleData] = useState(false);
+  const [workingSampleData, setWorkingSampleData] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [message, setMessage] = useState("");
 
@@ -186,77 +186,122 @@ export default function DashboardPage() {
     loadUser();
   }, []);
 
-async function handleAddSampleData() {
-  if (!user) return;
+  async function handleAddSampleData() {
+    if (!user) return;
 
-  setAddingSampleData(true);
-  setMessage("");
+    setWorkingSampleData(true);
+    setMessage("");
 
-  const sampleInvoices = [
-    { user_id: user.id, amount: 4200, status: "paid" },
-    { user_id: user.id, amount: 5800, status: "paid" },
-    { user_id: user.id, amount: 5000, status: "paid" },
-  ];
+    const sampleInvoices = [
+      { user_id: user.id, amount: 4200, status: "paid" },
+      { user_id: user.id, amount: 5800, status: "paid" },
+      { user_id: user.id, amount: 5000, status: "paid" },
+    ];
 
-  const sampleExpenses = [
-    { user_id: user.id, amount: 1250, category: "Materials" },
-    { user_id: user.id, amount: 950, category: "Materials" },
-    { user_id: user.id, amount: 725, category: "Fuel" },
-    { user_id: user.id, amount: 680, category: "Tools" },
-    { user_id: user.id, amount: 540, category: "Dump Fees" },
-    { user_id: user.id, amount: 825, category: "Labor" },
-    { user_id: user.id, amount: 610, category: "Supplies" },
-    { user_id: user.id, amount: 500, category: "Equipment Rental" },
-    { user_id: user.id, amount: 470, category: "Permits" },
-    { user_id: user.id, amount: 450, category: "Insurance" },
-  ];
+    const sampleExpenses = [
+      { user_id: user.id, amount: 1250, category: "Materials" },
+      { user_id: user.id, amount: 950, category: "Materials" },
+      { user_id: user.id, amount: 725, category: "Fuel" },
+      { user_id: user.id, amount: 680, category: "Tools" },
+      { user_id: user.id, amount: 540, category: "Dump Fees" },
+      { user_id: user.id, amount: 825, category: "Labor" },
+      { user_id: user.id, amount: 610, category: "Supplies" },
+      { user_id: user.id, amount: 500, category: "Equipment Rental" },
+      { user_id: user.id, amount: 470, category: "Permits" },
+      { user_id: user.id, amount: 450, category: "Insurance" },
+    ];
 
-  const { data: createdInvoices, error: invoiceError } = await supabase
-    .from("invoices")
-    .insert(sampleInvoices)
-    .select("id, amount");
+    const { data: createdInvoices, error: invoiceError } = await supabase
+      .from("invoices")
+      .insert(sampleInvoices)
+      .select("id, amount");
 
-  if (invoiceError) {
-    setMessage(`Error adding sample invoices: ${invoiceError.message}`);
-    setAddingSampleData(false);
-    return;
+    if (invoiceError) {
+      setMessage(`Error adding sample invoices: ${invoiceError.message}`);
+      setWorkingSampleData(false);
+      return;
+    }
+
+    const samplePayments = (createdInvoices || []).map((invoice) => ({
+      user_id: user.id,
+      invoice_id: invoice.id,
+      amount: invoice.amount,
+      match_status: "matched",
+    }));
+
+    const { error: paymentError } = await supabase
+      .from("payments")
+      .insert(samplePayments);
+
+    if (paymentError) {
+      setMessage(`Error adding sample payments: ${paymentError.message}`);
+      setWorkingSampleData(false);
+      return;
+    }
+
+    const { error: expenseError } = await supabase
+      .from("expenses")
+      .insert(sampleExpenses);
+
+    if (expenseError) {
+      setMessage(`Error adding sample expenses: ${expenseError.message}`);
+      setWorkingSampleData(false);
+      return;
+    }
+
+    await loadDashboard(user.id);
+
+    setMessage(
+      "Sample data added. Revenue: $15,000. Expenses: $7,000. Profit: $8,000."
+    );
+
+    setWorkingSampleData(false);
   }
 
-  const samplePayments = (createdInvoices || []).map((invoice) => ({
-    user_id: user.id,
-    invoice_id: invoice.id,
-    amount: invoice.amount,
-    match_status: "matched",
-  }));
+  async function handleClearSampleData() {
+    if (!user) return;
 
-  const { error: paymentError } = await supabase
-    .from("payments")
-    .insert(samplePayments);
+    setWorkingSampleData(true);
+    setMessage("");
 
-  if (paymentError) {
-    setMessage(`Error adding sample payments: ${paymentError.message}`);
-    setAddingSampleData(false);
-    return;
+    const { error: paymentError } = await supabase
+      .from("payments")
+      .delete()
+      .eq("user_id", user.id);
+
+    if (paymentError) {
+      setMessage(`Error clearing payments: ${paymentError.message}`);
+      setWorkingSampleData(false);
+      return;
+    }
+
+    const { error: expenseError } = await supabase
+      .from("expenses")
+      .delete()
+      .eq("user_id", user.id);
+
+    if (expenseError) {
+      setMessage(`Error clearing expenses: ${expenseError.message}`);
+      setWorkingSampleData(false);
+      return;
+    }
+
+    const { error: invoiceError } = await supabase
+      .from("invoices")
+      .delete()
+      .eq("user_id", user.id);
+
+    if (invoiceError) {
+      setMessage(`Error clearing invoices: ${invoiceError.message}`);
+      setWorkingSampleData(false);
+      return;
+    }
+
+    await loadDashboard(user.id);
+
+    setMessage("Sample data cleared. Fresh start — no shame, we all need a reset.");
+    setWorkingSampleData(false);
   }
-
-  const { error: expenseError } = await supabase
-    .from("expenses")
-    .insert(sampleExpenses);
-
-  if (expenseError) {
-    setMessage(`Error adding sample expenses: ${expenseError.message}`);
-    setAddingSampleData(false);
-    return;
-  }
-
-  await loadDashboard(user.id);
-
-  setMessage(
-    "Sample data added. Revenue: $15,000. Expenses: $7,000. Profit: $8,000."
-  );
-
-  setAddingSampleData(false);
-}
 
   async function handleSignOut() {
     const { error } = await supabase.auth.signOut();
@@ -358,8 +403,8 @@ async function handleAddSampleData() {
     1
   );
 
-  const hasAnyBusinessData =
-  expenses.length > 0 && invoices.length > 0 && payments.length > 0;
+  const hasFullSampleStyleData =
+    expenses.length > 0 && invoices.length > 0 && payments.length > 0;
 
   if (loading) {
     return (
@@ -391,33 +436,43 @@ async function handleAddSampleData() {
       <div className="mx-auto max-w-7xl space-y-8">
         <OnboardingChecklist />
 
-        {!hasAnyBusinessData && (
-          <section className="rounded-3xl bg-slate-950 p-8 text-white shadow-sm">
-            <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-sm font-bold uppercase tracking-wide text-slate-300">
-                  New here?
-                </p>
-                <h2 className="mt-2 text-2xl font-black">
-                  Add sample numbers and see how this thing works.
-                </h2>
-                <p className="mt-2 max-w-2xl text-sm font-medium text-slate-300">
-                  We’ll add 3 paid invoices and 10 expenses so your dashboard
-                  shows real revenue, expenses, and profit instead of a big pile
-                  of zeros.
-                </p>
-              </div>
+        <section className="rounded-3xl bg-slate-950 p-8 text-white shadow-sm">
+          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-wide text-slate-300">
+                New here?
+              </p>
+              <h2 className="mt-2 text-2xl font-black">
+                Kick the tires without wrecking your real numbers.
+              </h2>
+              <p className="mt-2 max-w-2xl text-sm font-medium text-slate-300">
+                Add sample invoices, payments, and expenses so the dashboard
+                actually shows how TrueAngle works. Clear it when you’re ready
+                to run your real business through it.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row">
+              {!hasFullSampleStyleData && (
+                <button
+                  onClick={handleAddSampleData}
+                  disabled={workingSampleData}
+                  className="rounded-xl bg-white px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {workingSampleData ? "Working..." : "Add Sample Data"}
+                </button>
+              )}
 
               <button
-                onClick={handleAddSampleData}
-                disabled={addingSampleData}
-                className="rounded-xl bg-white px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={handleClearSampleData}
+                disabled={workingSampleData}
+                className="rounded-xl border border-white/30 px-5 py-3 text-sm font-black text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {addingSampleData ? "Adding..." : "Add Sample Data"}
+                {workingSampleData ? "Working..." : "Clear Sample Data"}
               </button>
             </div>
-          </section>
-        )}
+          </div>
+        </section>
 
         <section className="rounded-3xl bg-gradient-to-r from-white to-slate-50 p-8 shadow-sm ring-1 ring-slate-200">
           <p className="text-sm font-semibold uppercase tracking-wide text-slate-600">
