@@ -435,6 +435,28 @@ export default function DashboardPage() {
       <AppNav onSignOut={handleSignOut} />
       <TrialBanner />
 
+      <button
+  onClick={async () => {
+    if (!user) return;
+
+    const res = await fetch("/api/stripe/portal", {
+      method: "POST",
+      body: JSON.stringify({
+        customerId: user.id, // adjust if you store stripe_customer_id
+      }),
+    });
+
+    const data = await res.json();
+
+    if (data.url) {
+      window.location.href = data.url;
+    }
+  }}
+  className="text-sm font-semibold text-blue-600 hover:underline"
+>
+  Manage Subscription
+</button>
+
       <div className="mx-auto max-w-7xl space-y-8">
         <OnboardingChecklist />
 
