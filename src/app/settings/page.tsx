@@ -28,6 +28,7 @@ type CompanySettings = {
 export default function SettingsPage() {
   const [authLoading, setAuthLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [addingBookkeeper, setAddingBookkeeper] = useState(false);
 
   const [user, setUser] = useState<AuthUser | null>(null);
   const [settingsId, setSettingsId] = useState<string | null>(null);
@@ -46,6 +47,7 @@ export default function SettingsPage() {
   const [licenseNumber, setLicenseNumber] = useState("");
   const [defaultTerms, setDefaultTerms] = useState("");
 
+  const [bookkeeperEmail, setBookkeeperEmail] = useState("");
   const [message, setMessage] = useState("");
 
   function clearForm() {
@@ -62,18 +64,19 @@ export default function SettingsPage() {
     setTaxId("");
     setLicenseNumber("");
     setDefaultTerms("");
+    setBookkeeperEmail("");
   }
 
   async function handleManageSubscription() {
     try {
       setMessage("Opening billing portal...");
 
-const res = await fetch("/api/stripe/portal", {
-  method: "POST",
-  body: JSON.stringify({
-    userId: user?.id,
-  }),
-});
+      const res = await fetch("/api/stripe/portal", {
+        method: "POST",
+        body: JSON.stringify({
+          userId: user?.id,
+        }),
+      });
 
       const data = await res.json();
 
@@ -86,6 +89,49 @@ const res = await fetch("/api/stripe/portal", {
     } catch (err) {
       console.error(err);
       setMessage("Something went wrong opening billing.");
+    }
+  }
+
+  async function handleAddBookkeeper() {
+    if (!user) {
+      setMessage("You must be signed in.");
+      return;
+    }
+
+    if (!bookkeeperEmail.trim()) {
+      setMessage("Enter the bookkeeper's email first.");
+      return;
+    }
+
+    setAddingBookkeeper(true);
+    setMessage("Adding bookkeeper...");
+
+    try {
+      const res = await fetch("/api/company/add-member", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: bookkeeperEmail.trim(),
+          ownerUserId: user.id,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setMessage(data.error || "Could not add bookkeeper.");
+        return;
+      }
+
+      setBookkeeperEmail("");
+      setMessage("Bookkeeper added. Hopefully they know what they're doing.");
+    } catch (err) {
+      console.error(err);
+      setMessage("Something went wrong adding the bookkeeper.");
+    } finally {
+      setAddingBookkeeper(false);
     }
   }
 
@@ -144,9 +190,7 @@ const res = await fetch("/api/stripe/portal", {
         return;
       }
 
-      if (!data) {
-        return;
-      }
+      if (!data) return;
 
       const settings = data as CompanySettings;
 
@@ -303,9 +347,7 @@ const res = await fetch("/api/stripe/portal", {
           .eq("id", settingsId)
           .eq("user_id", user.id);
 
-        if (error) {
-          throw new Error(error.message);
-        }
+        if (error) throw new Error(error.message);
       } else {
         const { data, error } = await supabase
           .from("company_settings")
@@ -313,9 +355,7 @@ const res = await fetch("/api/stripe/portal", {
           .select()
           .single();
 
-        if (error) {
-          throw new Error(error.message);
-        }
+        if (error) throw new Error(error.message);
 
         setSettingsId((data as CompanySettings).id);
       }
@@ -415,6 +455,41 @@ const res = await fetch("/api/stripe/portal", {
               invoices, and future PDFs.
             </div>
           </div>
+        </section>
+
+        <section className="rounded-2xl bg-white p-8 shadow">
+          <h2 className="text-xl font-bold text-slate-950">
+            Bookkeeper Access
+          </h2>
+
+          <p className="mt-2 text-sm text-slate-700">
+            Add one bookkeeper or accountant to help categorize expenses and
+            review reports. They need to create a free TrueAngle account first.
+          </p>
+
+          <div className="mt-6 grid gap-3 sm:grid-cols-[1fr_auto]">
+            <input
+              type="email"
+              value={bookkeeperEmail}
+              onChange={(e) => setBookkeeperEmail(e.target.value)}
+              placeholder="bookkeeper@email.com"
+              className="w-full rounded-lg border border-slate-300 bg-white p-3 text-slate-950 placeholder:text-slate-500"
+            />
+
+            <button
+              type="button"
+              onClick={handleAddBookkeeper}
+              disabled={addingBookkeeper}
+              className="rounded-lg bg-slate-950 px-5 py-3 font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-500"
+            >
+              {addingBookkeeper ? "Adding..." : "Add Bookkeeper"}
+            </button>
+          </div>
+
+          <p className="mt-3 text-xs font-medium text-slate-500">
+            Included: 1 free bookkeeper per company. Additional users can be
+            added later as a paid upgrade.
+          </p>
         </section>
 
         <section className="rounded-2xl bg-white p-8 shadow">
