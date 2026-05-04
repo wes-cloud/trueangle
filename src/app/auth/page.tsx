@@ -6,55 +6,98 @@ import { supabase } from "@/lib/supabase";
 export default function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
   const [message, setMessage] = useState("");
 
-  async function handleSignIn(e: React.FormEvent) {
-    e.preventDefault();
-    setMessage("Signing in...");
+  async function handleAuth() {
+    setLoading(true);
+    setMessage("");
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      if (isSignUp) {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+        });
 
-    if (error) {
-      setMessage(error.message);
-      return;
+        if (error) {
+          setMessage(error.message);
+          return;
+        }
+
+        setMessage("Account created. You can now sign in.");
+        setIsSignUp(false);
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (error) {
+          setMessage(error.message);
+          return;
+        }
+
+        window.location.href = "/dashboard";
+      }
+    } catch (err) {
+      setMessage("Something went wrong.");
+    } finally {
+      setLoading(false);
     }
-
-    window.location.href = "/dashboard";
   }
 
   return (
-    <main className="min-h-screen bg-slate-100 p-8 text-slate-950">
-      <div className="mx-auto max-w-md rounded-3xl bg-white p-8 shadow">
-        <h1 className="text-3xl font-black">Sign in to TrueAngle</h1>
+    <main className="min-h-screen flex items-center justify-center bg-slate-100">
+      <div className="w-full max-w-md bg-white p-8 rounded-2xl shadow">
+        <h1 className="text-2xl font-bold mb-6 text-center">
+          {isSignUp ? "Create Account" : "Sign In"}
+        </h1>
 
-        <form onSubmit={handleSignIn} className="mt-6 space-y-4">
-          <input
-            type="email"
-            required
-            placeholder="you@company.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-xl border border-slate-300 p-3"
-          />
+        <input
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="w-full mb-3 p-3 border rounded"
+        />
 
-          <input
-            type="password"
-            required
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-xl border border-slate-300 p-3"
-          />
+        <input
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className="w-full mb-4 p-3 border rounded"
+        />
 
-          <button className="w-full rounded-xl bg-black px-5 py-3 font-bold text-white">
-            Sign In
-          </button>
-        </form>
+        <button
+          onClick={handleAuth}
+          disabled={loading}
+          className="w-full bg-slate-900 text-white py-3 rounded font-semibold"
+        >
+          {loading
+            ? "Working..."
+            : isSignUp
+            ? "Create Account"
+            : "Sign In"}
+        </button>
 
-        {message && <p className="mt-4 text-sm font-semibold">{message}</p>}
+        <button
+          onClick={() => {
+            setIsSignUp(!isSignUp);
+            setMessage("");
+          }}
+          className="mt-4 text-sm text-slate-600 underline w-full"
+        >
+          {isSignUp
+            ? "Already have an account? Sign in"
+            : "No account? Create one"}
+        </button>
+
+        {message && (
+          <p className="mt-4 text-sm text-center text-red-600">{message}</p>
+        )}
       </div>
     </main>
   );
