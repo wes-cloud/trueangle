@@ -359,7 +359,7 @@ async function handleAddSampleData() {
   );
 
   const hasAnyBusinessData =
-    expenses.length > 0 || invoices.length > 0 || payments.length > 0;
+  expenses.length > 0 && invoices.length > 0 && payments.length > 0;
 
   if (loading) {
     return (
