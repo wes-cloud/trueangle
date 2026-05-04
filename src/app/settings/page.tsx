@@ -64,6 +64,28 @@ export default function SettingsPage() {
     setDefaultTerms("");
   }
 
+  async function handleManageSubscription() {
+    try {
+      setMessage("Opening billing portal...");
+
+      const res = await fetch("/api/stripe/portal", {
+        method: "POST",
+      });
+
+      const data = await res.json();
+
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+
+      setMessage(data.error || "Could not open billing portal.");
+    } catch (err) {
+      console.error(err);
+      setMessage("Something went wrong opening billing.");
+    }
+  }
+
   async function getOrCreateCompany(currentUser: AuthUser) {
     const { data: membership } = await supabase
       .from("company_members")
@@ -246,22 +268,22 @@ export default function SettingsPage() {
       const currentCompanyId = companyId || (await getOrCreateCompany(user));
       setCompanyId(currentCompanyId);
 
-let uploadedLogo = {
-  publicUrl: logoUrl || null,
-  storagePath: logoStoragePath || null,
-};
+      let uploadedLogo = {
+        publicUrl: logoUrl || null,
+        storagePath: logoStoragePath || null,
+      };
 
-if (logoFile) {
-  uploadedLogo = await uploadLogoFile(currentCompanyId);
-}
+      if (logoFile) {
+        uploadedLogo = await uploadLogoFile(currentCompanyId);
+      }
 
-const payload = {
-  user_id: user.id,
-  company_id: currentCompanyId,
-  company_name: companyName.trim() || null,
-  website_url: websiteUrl.trim() || null,
-  logo_url: uploadedLogo.publicUrl,
-  logo_storage_path: uploadedLogo.storagePath,
+      const payload = {
+        user_id: user.id,
+        company_id: currentCompanyId,
+        company_name: companyName.trim() || null,
+        website_url: websiteUrl.trim() || null,
+        logo_url: uploadedLogo.publicUrl,
+        logo_storage_path: uploadedLogo.storagePath,
         phone: phone.trim() || null,
         email: email.trim() || null,
         address: address.trim() || null,
@@ -393,6 +415,25 @@ const payload = {
         </section>
 
         <section className="rounded-2xl bg-white p-8 shadow">
+          <h2 className="text-xl font-bold text-slate-950">Billing</h2>
+
+          <p className="mt-2 text-sm text-slate-700">
+            You're on a free trial. Billing starts automatically unless you
+            cancel.
+          </p>
+
+          <div className="mt-6">
+            <button
+              type="button"
+              onClick={handleManageSubscription}
+              className="rounded-lg bg-slate-950 px-5 py-3 font-semibold text-white hover:bg-slate-800"
+            >
+              Manage Subscription
+            </button>
+          </div>
+        </section>
+
+        <section className="rounded-2xl bg-white p-8 shadow">
           <form onSubmit={handleSave} className="space-y-6">
             <div className="grid gap-4 md:grid-cols-2">
               <div>
@@ -435,7 +476,8 @@ const payload = {
               />
 
               <p className="mt-2 text-sm text-slate-700">
-                Upload a logo image. Accepted files: PNG, JPG, JPEG, WEBP, or SVG.
+                Upload a logo image. Accepted files: PNG, JPG, JPEG, WEBP, or
+                SVG.
               </p>
 
               {logoFile && (
