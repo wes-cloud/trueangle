@@ -439,42 +439,62 @@ export default function DashboardPage() {
         <OnboardingChecklist />
 
         <section className="rounded-3xl bg-slate-950 p-8 text-white shadow-sm">
-          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-sm font-bold uppercase tracking-wide text-slate-300">
-                New here?
-              </p>
-              <h2 className="mt-2 text-2xl font-black">
-                Kick the tires without wrecking your real numbers.
-              </h2>
-              <p className="mt-2 max-w-2xl text-sm font-medium text-slate-300">
-                Add sample invoices, payments, and expenses so the dashboard
-                actually shows how TrueAngle works. Clear it when you’re ready
-                to run your real business through it.
-              </p>
-            </div>
+  <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+    <div>
+      <p className="text-sm font-bold uppercase tracking-wide text-slate-300">
+        {hasFullSampleStyleData ? "Your turn" : "New here?"}
+      </p>
 
-            <div className="flex flex-col gap-3 sm:flex-row">
-              {!hasFullSampleStyleData && (
-                <button
-                  onClick={handleAddSampleData}
-                  disabled={workingSampleData}
-                  className="rounded-xl bg-white px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {workingSampleData ? "Working..." : "Add Sample Data"}
-                </button>
-              )}
+      <h2 className="mt-2 text-2xl font-black">
+        {hasFullSampleStyleData
+          ? "Now run it with your real numbers."
+          : "Kick the tires without wrecking your real numbers."}
+      </h2>
 
-              <button
-                onClick={handleClearSampleData}
-                disabled={workingSampleData}
-                className="rounded-xl border border-white/30 px-5 py-3 text-sm font-black text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {workingSampleData ? "Working..." : "Clear Sample Data"}
-              </button>
-            </div>
-          </div>
-        </section>
+      <p className="mt-2 max-w-2xl text-sm font-medium text-slate-300">
+        {hasFullSampleStyleData
+          ? "The sample numbers show how TrueAngle works. Now add a real expense or create a real invoice so you can see what your jobs are actually making."
+          : "Add sample invoices, payments, and expenses so the dashboard actually shows how TrueAngle works. Clear it when you’re ready to run your real business through it."}
+      </p>
+    </div>
+
+    <div className="flex flex-col gap-3 sm:flex-row">
+      {!hasFullSampleStyleData ? (
+        <button
+          onClick={handleAddSampleData}
+          disabled={workingSampleData}
+          className="rounded-xl bg-white px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {workingSampleData ? "Working..." : "Add Sample Data"}
+        </button>
+      ) : (
+        <>
+          <a
+            href="/dashboard/expenses"
+            className="rounded-xl bg-white px-5 py-3 text-center text-sm font-black text-slate-950 transition hover:bg-slate-200"
+          >
+            Add Real Expense
+          </a>
+
+          <a
+            href="/dashboard/invoices"
+            className="rounded-xl bg-white px-5 py-3 text-center text-sm font-black text-slate-950 transition hover:bg-slate-200"
+          >
+            Create Real Invoice
+          </a>
+        </>
+      )}
+
+      <button
+        onClick={handleClearSampleData}
+        disabled={workingSampleData}
+        className="rounded-xl border border-white/30 px-5 py-3 text-sm font-black text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {workingSampleData ? "Working..." : "Clear Sample Data"}
+      </button>
+    </div>
+  </div>
+</section>
 
         <section className="rounded-3xl bg-gradient-to-r from-white to-slate-50 p-8 shadow-sm ring-1 ring-slate-200">
           <p className="text-sm font-semibold uppercase tracking-wide text-slate-600">
