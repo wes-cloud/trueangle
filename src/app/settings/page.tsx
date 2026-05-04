@@ -33,6 +33,7 @@ export default function SettingsPage() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [settingsId, setSettingsId] = useState<string | null>(null);
   const [companyId, setCompanyId] = useState<string | null>(null);
+  const [companyRole, setCompanyRole] = useState<string | null>(null);
 
   const [companyName, setCompanyName] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
@@ -136,15 +137,17 @@ export default function SettingsPage() {
   }
 
   async function getOrCreateCompany(currentUser: AuthUser) {
-    const { data: membership } = await supabase
-      .from("company_members")
-      .select("company_id")
-      .eq("user_id", currentUser.id)
-      .maybeSingle();
+const { data: memberships } = await supabase
+  .from("company_members")
+  .select("company_id, role")
+  .eq("user_id", currentUser.id)
+  .limit(1);
 
-    if (membership?.company_id) {
-      return membership.company_id as string;
-    }
+const membership = memberships?.[0];
+
+if (membership?.role) {
+  setCompanyRole(membership.role);
+}
 
     const { data: newCompany, error: companyError } = await supabase
       .from("companies")
