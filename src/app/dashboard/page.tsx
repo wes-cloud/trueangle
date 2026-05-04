@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import AppNav from "@/components/AppNav";
 import OnboardingChecklist from "@/components/OnboardingChecklist";
 import { supabase } from "@/lib/supabase";
+import TrialBanner from "@/components/TrialBanner";
 
 type AuthUser = {
   id: string;
@@ -432,6 +433,7 @@ export default function DashboardPage() {
   return (
     <main className="min-h-screen bg-slate-100 p-8 text-slate-950">
       <AppNav onSignOut={handleSignOut} />
+      <TrialBanner />
 
       <div className="mx-auto max-w-7xl space-y-8">
         <OnboardingChecklist />
