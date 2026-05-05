@@ -1191,6 +1191,145 @@ export default function MileagePage() {
           )}
         </div>
 
+<div className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
+  <h2 className="mb-4 text-2xl font-bold text-gray-900">
+    Vehicle Garage
+  </h2>
+
+  {vehicles.length === 0 ? (
+    <p className="text-gray-600">No vehicles added yet.</p>
+  ) : (
+    <div className="space-y-4">
+      {vehicles.map((vehicle) => {
+        const vehicleLogs = logs.filter(
+          (log) => log.vehicle_id === vehicle.id
+        );
+
+        const totalMiles = vehicleLogs.reduce(
+          (sum, log) => sum + Number(log.total_miles || 0),
+          0
+        );
+
+        const businessMiles = vehicleLogs
+          .filter((log) => log.trip_type === "business")
+          .reduce((sum, log) => sum + Number(log.total_miles || 0), 0);
+
+        const personalMiles = vehicleLogs
+          .filter((log) => log.trip_type === "personal")
+          .reduce((sum, log) => sum + Number(log.total_miles || 0), 0);
+
+        const commuteMiles = vehicleLogs
+          .filter((log) => log.trip_type === "commute")
+          .reduce((sum, log) => sum + Number(log.total_miles || 0), 0);
+
+        const beginning = Number(vehicle.beginning_miles || 0);
+        const ending = vehicle.ending_miles;
+
+        const odometerMiles =
+          ending === null || ending === undefined
+            ? null
+            : Number(ending) - beginning;
+
+        const unassigned =
+          odometerMiles === null ? null : odometerMiles - totalMiles;
+
+        return (
+          <div
+            key={vehicle.id}
+            className={`rounded-2xl border p-5 ${
+              selectedVehicleId === vehicle.id
+                ? "border-blue-500"
+                : "border-gray-200"
+            }`}
+          >
+            <div className="flex flex-col gap-2 md:flex-row md:justify-between">
+              <div>
+                <p className="text-lg font-bold text-gray-900">
+                  {getVehicleLabel(vehicle)}
+                </p>
+
+                <p className="text-sm text-gray-600">
+                  Year: {vehicle.year_tracked}
+                </p>
+
+                <p className="text-sm text-gray-600">
+                  Beginning: {formatMiles(vehicle.beginning_miles)}
+                </p>
+
+                <p className="text-sm text-gray-600">
+                  Ending:{" "}
+                  {vehicle.ending_miles === null
+                    ? "Not set"
+                    : formatMiles(vehicle.ending_miles)}
+                </p>
+              </div>
+
+              <div className="text-right space-y-1">
+                <p className="font-semibold">
+                  Total: {formatMiles(totalMiles)}
+                </p>
+                <p className="text-sm text-gray-600">
+                  Business: {formatMiles(businessMiles)}
+                </p>
+                <p className="text-sm text-gray-600">
+                  Personal: {formatMiles(personalMiles)}
+                </p>
+                <p className="text-sm text-gray-600">
+                  Commute: {formatMiles(commuteMiles)}
+                </p>
+                <p className="text-sm text-gray-600">
+                  Unassigned:{" "}
+                  {unassigned === null
+                    ? "—"
+                    : formatMiles(unassigned)}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                onClick={() => setSelectedVehicleId(vehicle.id)}
+                className="rounded bg-blue-600 px-3 py-1 text-white"
+              >
+                Set Active
+              </button>
+
+              <button
+                onClick={async () => {
+                  const confirmed = window.confirm(
+                    "Delete this vehicle and all its logs?"
+                  );
+                  if (!confirmed) return;
+
+                  try {
+                    await supabase
+                      .from("mileage_logs")
+                      .delete()
+                      .eq("vehicle_id", vehicle.id);
+
+                    await supabase
+                      .from("vehicles")
+                      .delete()
+                      .eq("id", vehicle.id);
+
+                    setMessage("Vehicle deleted.");
+                    if (user) await loadPageData(user.id);
+                  } catch {
+                    setMessage("Error deleting vehicle.");
+                  }
+                }}
+                className="rounded bg-red-600 px-3 py-1 text-white"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  )}
+</div>
+
         <div className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
           <h2 className="mb-4 text-2xl font-bold text-gray-900">
             Saved Mileage Logs
