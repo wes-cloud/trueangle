@@ -53,15 +53,9 @@ type Expense = {
   notes?: string | null;
 };
 
-const defaultAgreementTerms = `This estimate outlines the agreed scope of work and pricing for the project listed above.
+const defaultAgreementTerms = `This estimate is for the work listed above. By approving this estimate, the client confirms they have reviewed the scope and pricing and would like the contractor to move forward with scheduling the work.
 
-Any work not included in this estimate may require a separate written change order.
-
-Changes to scope, materials, schedule, or site conditions may affect the final price and timeline.
-
-Payment terms, deposits, and final payment expectations should be agreed to before work begins.
-
-By approving this estimate, the client confirms they have reviewed the scope, pricing, and terms and authorize the contractor to move forward.`;
+Approval of this estimate does not replace a formal contract. The contractor may send a separate invoice, contract, or payment terms before work begins.`;
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -80,21 +74,33 @@ function formatDate(value: string | null) {
 }
 
 function formatStatus(status: string | null) {
-  if (!status) return "Draft";
-
   switch (status) {
-    case "draft":
-      return "Draft";
     case "sent":
-      return "Sent";
+      return "Sent to Client";
     case "approved":
-      return "Approved";
+      return "Approved Internally";
     case "declined":
       return "Declined";
     case "converted":
       return "Converted to Invoice";
+    case "draft":
     default:
-      return status.charAt(0).toUpperCase() + status.slice(1);
+      return "Draft";
+  }
+}
+
+function getStatusClass(status: string | null) {
+  switch (status) {
+    case "sent":
+      return "bg-yellow-100 text-yellow-900 ring-yellow-200";
+    case "approved":
+      return "bg-blue-100 text-blue-900 ring-blue-200";
+    case "converted":
+      return "bg-green-100 text-green-900 ring-green-200";
+    case "declined":
+      return "bg-red-100 text-red-900 ring-red-200";
+    default:
+      return "bg-gray-100 text-gray-800 ring-gray-200";
   }
 }
 
@@ -203,18 +209,10 @@ export default function EstimateDetailPage() {
     if (safeEstimate.customer_id) {
       const { data: customerData } = await supabase
         .from("customers")
-        .select(
-          `
-          id,
-          full_name,
-          email,
-          phone,
-          address
-        `
-        )
+        .select("id, full_name, email, phone, address")
         .eq("id", safeEstimate.customer_id)
         .eq("user_id", user.id)
-        .single();
+        .maybeSingle();
 
       setCustomer((customerData as Customer) || null);
     } else {
@@ -310,7 +308,7 @@ export default function EstimateDetailPage() {
       .from("estimates")
       .update({
         approval_required: approvalRequired,
-        agreement_terms: agreementTerms,
+        agreement_terms: agreementTerms || defaultAgreementTerms,
       })
       .eq("id", estimate.id)
       .eq("user_id", user.id);
@@ -358,7 +356,7 @@ export default function EstimateDetailPage() {
       return;
     }
 
-    setMessage("Estimate marked as sent. Copy the approval link and send it to your client.");
+    setMessage("Estimate is ready. Copy the approval link and send it to your client.");
     await loadData();
     setStatusLoading(false);
   }
@@ -474,6 +472,7 @@ export default function EstimateDetailPage() {
 
   const estimateAmount = Number(estimate?.amount || 0);
   const projectProfit = estimateAmount - totalExpenses;
+  const isConverted = Boolean(estimate?.converted_invoice_id);
 
   if (loading) {
     return (
@@ -481,36 +480,22 @@ export default function EstimateDetailPage() {
         <AppNav onSignOut={handleSignOut} />
         <div className="mx-auto max-w-6xl">
           <div className="rounded-2xl bg-white p-6 shadow">
-            <p className="text-gray-900">Loading project...</p>
+            <p className="text-gray-900">Loading estimate...</p>
           </div>
         </div>
       </main>
     );
   }
 
-  if (error) {
+  if (error || !estimate) {
     return (
       <main className="min-h-screen bg-gray-100 p-6 text-gray-900">
         <AppNav onSignOut={handleSignOut} />
         <div className="mx-auto max-w-6xl">
           <div className="space-y-4 rounded-2xl bg-white p-6 shadow">
-            <p className="text-red-600">Error: {error}</p>
-            <Link href="/estimates" className="text-blue-600 underline">
-              Back to Estimates
-            </Link>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  if (!estimate) {
-    return (
-      <main className="min-h-screen bg-gray-100 p-6 text-gray-900">
-        <AppNav onSignOut={handleSignOut} />
-        <div className="mx-auto max-w-6xl">
-          <div className="space-y-4 rounded-2xl bg-white p-6 shadow">
-            <p className="text-gray-900">Project not found.</p>
+            <p className="text-red-600">
+              Error: {error || "Estimate not found."}
+            </p>
             <Link href="/estimates" className="text-blue-600 underline">
               Back to Estimates
             </Link>
@@ -525,68 +510,124 @@ export default function EstimateDetailPage() {
       <AppNav onSignOut={handleSignOut} />
 
       <div className="mx-auto max-w-6xl space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-sm text-gray-700">Project / Estimate</p>
-            <h1 className="text-3xl font-bold text-gray-900">
-              {estimate.job_name || estimate.customer_name || "Project"}
-            </h1>
-            <p className="text-sm text-gray-700">
-              Estimate #: {estimate.estimate_number || "—"}
+        <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+                Estimate
+              </p>
+
+              <h1 className="mt-2 text-3xl font-bold text-gray-900">
+                {estimate.job_name || estimate.customer_name || "Project"}
+              </h1>
+
+              <div className="mt-3 space-y-1 text-sm text-gray-700">
+                <p>Estimate #: {estimate.estimate_number || "—"}</p>
+                <p>Created: {formatDate(estimate.created_at)}</p>
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-semibold ring-1 ${getStatusClass(
+                    estimate.status
+                  )}`}
+                >
+                  {formatStatus(estimate.status)}
+                </span>
+
+                {isConverted && (
+                  <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-800 ring-1 ring-green-100">
+                    Invoice Created
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <Link
+                href="/estimates"
+                className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-gray-900 shadow-sm"
+              >
+                Back
+              </Link>
+
+              <Link
+                href={`/expenses?estimate_id=${estimate.id}`}
+                className="rounded-xl bg-blue-600 px-4 py-2 text-white"
+              >
+                + Expense
+              </Link>
+
+              {estimate.converted_invoice_id ? (
+                <Link
+                  href={`/invoices?invoice_id=${estimate.converted_invoice_id}`}
+                  className="rounded-xl bg-green-600 px-4 py-2 text-white"
+                >
+                  View Invoice
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleCreateInvoice}
+                  disabled={statusLoading}
+                  className="rounded-xl bg-green-600 px-4 py-2 text-white disabled:opacity-50"
+                >
+                  Convert to Invoice
+                </button>
+              )}
+
+              <a
+                href={`/estimates/${estimate.id}/print`}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-xl bg-black px-4 py-2 text-white"
+              >
+                Print
+              </a>
+            </div>
+          </div>
+        </section>
+
+        <section className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-200">
+            <p className="text-sm text-gray-700">Estimate Total</p>
+            <p className="mt-2 text-2xl font-semibold text-gray-900">
+              {formatCurrency(estimateAmount)}
             </p>
-            <p className="text-sm text-gray-700">
-              Created: {formatDate(estimate.created_at)}
+          </div>
+
+          <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-200">
+            <p className="text-sm text-gray-700">Project Expenses</p>
+            <p className="mt-2 text-2xl font-semibold text-gray-900">
+              {formatCurrency(totalExpenses)}
             </p>
-            <p className="text-sm text-gray-700">
-              Status:{" "}
-              <span className="font-semibold text-gray-900">
-                {formatStatus(estimate.status)}
-              </span>
+          </div>
+
+          <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-200">
+            <p className="text-sm text-gray-700">Projected Profit</p>
+            <p className="mt-2 text-2xl font-semibold text-gray-900">
+              {formatCurrency(projectProfit)}
+            </p>
+          </div>
+        </section>
+
+        <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
+          <div className="mb-5">
+            <h2 className="text-2xl font-bold text-gray-900">
+              Estimate Workflow
+            </h2>
+            <p className="mt-1 text-sm text-gray-600">
+              Send the estimate to the client for review. When they approve it
+              through the link, TrueAngle creates the invoice automatically.
             </p>
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <Link
-              href="/estimates"
-              className="rounded border border-gray-300 bg-white px-4 py-2 text-gray-900 shadow-sm"
-            >
-              Back
-            </Link>
-
-            <Link
-              href={`/expenses?estimate_id=${estimate.id}`}
-              className="rounded bg-blue-600 px-4 py-2 text-white"
-            >
-              + Add Expense
-            </Link>
-
-            <button
-              type="button"
-              onClick={handleCreateInvoice}
-              disabled={statusLoading}
-              className="rounded bg-green-600 px-4 py-2 text-white disabled:opacity-50"
-            >
-              Create Invoice
-            </button>
-
-            <a
-              href={`/estimates/${estimate.id}/print`}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded bg-black px-4 py-2 text-white"
-            >
-              Print
-            </a>
-          </div>
-        </div>
-
-        <section className="rounded-2xl bg-white p-6 shadow">
-          <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
               onClick={() => updateStatus("draft")}
-              disabled={statusLoading}
-              className="rounded border border-gray-300 bg-white px-4 py-2 text-gray-900 shadow-sm disabled:opacity-50"
+              disabled={statusLoading || isConverted}
+              className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-gray-900 shadow-sm disabled:opacity-50"
             >
               Mark Draft
             </button>
@@ -594,8 +635,8 @@ export default function EstimateDetailPage() {
             <button
               type="button"
               onClick={() => updateStatus("sent")}
-              disabled={statusLoading}
-              className="rounded border border-gray-300 bg-white px-4 py-2 text-gray-900 shadow-sm disabled:opacity-50"
+              disabled={statusLoading || isConverted}
+              className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-gray-900 shadow-sm disabled:opacity-50"
             >
               Mark Sent
             </button>
@@ -603,33 +644,41 @@ export default function EstimateDetailPage() {
             <button
               type="button"
               onClick={() => updateStatus("approved")}
-              disabled={statusLoading}
-              className="rounded bg-green-600 px-4 py-2 text-white disabled:opacity-50"
+              disabled={statusLoading || isConverted}
+              className="rounded-xl bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
             >
-              Mark Approved
+              Approve Internally
             </button>
 
             <button
               type="button"
               onClick={() => updateStatus("declined")}
-              disabled={statusLoading}
-              className="rounded bg-red-600 px-4 py-2 text-white disabled:opacity-50"
+              disabled={statusLoading || isConverted}
+              className="rounded-xl bg-red-600 px-4 py-2 text-white disabled:opacity-50"
             >
               Mark Declined
             </button>
           </div>
 
+          <p className="mt-4 text-xs text-gray-500">
+            “Approve Internally” only updates the estimate status. To create an
+            invoice, use the client approval link or the “Convert to Invoice”
+            button.
+          </p>
+
           {message && <p className="mt-4 text-sm text-gray-900">{message}</p>}
         </section>
 
-        <section className="rounded-2xl bg-white p-6 shadow">
+        <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
           <div className="flex flex-col gap-4">
             <div>
-              <h2 className="text-xl font-semibold text-gray-900">
-                Client Approval
+              <h2 className="text-2xl font-bold text-gray-900">
+                Client Approval Link
               </h2>
               <p className="mt-1 text-sm text-gray-700">
-                Add simple agreement terms, then send the approval link to your client.
+                Use this when you want the client to review the estimate and
+                approve moving forward. Approval automatically creates a draft
+                invoice.
               </p>
             </div>
 
@@ -638,22 +687,25 @@ export default function EstimateDetailPage() {
                 type="checkbox"
                 checked={approvalRequired}
                 onChange={(event) => setApprovalRequired(event.target.checked)}
+                disabled={isConverted}
                 className="h-4 w-4"
               />
-              Require client approval before work starts
+              Require client approval before moving forward
             </label>
 
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-900">
-                Agreement Terms
+                Approval Terms
               </label>
               <textarea
                 value={agreementTerms}
                 onChange={(event) => setAgreementTerms(event.target.value)}
-                className="min-h-[180px] w-full rounded-lg border p-3 text-gray-900"
+                disabled={isConverted}
+                className="min-h-[180px] w-full rounded-lg border p-3 text-gray-900 disabled:bg-gray-100"
               />
               <p className="mt-2 text-xs text-gray-600">
-                These terms are a general template. Contractors should have an attorney review important agreements.
+                These terms set expectations for estimate approval. They are not
+                a replacement for a formal contract.
               </p>
             </div>
 
@@ -661,8 +713,8 @@ export default function EstimateDetailPage() {
               <button
                 type="button"
                 onClick={handleSaveApprovalSettings}
-                disabled={savingApproval}
-                className="rounded bg-black px-4 py-2 text-white disabled:opacity-50"
+                disabled={savingApproval || isConverted}
+                className="rounded-xl bg-black px-4 py-2 text-white disabled:opacity-50"
               >
                 Save Approval Settings
               </button>
@@ -670,24 +722,24 @@ export default function EstimateDetailPage() {
               <button
                 type="button"
                 onClick={handleSendForApproval}
-                disabled={statusLoading}
-                className="rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
+                disabled={statusLoading || isConverted}
+                className="rounded-xl bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
               >
                 Send for Approval
               </button>
 
-              {approvalLink && (
+              {approvalLink && !isConverted && (
                 <button
                   type="button"
                   onClick={copyApprovalLink}
-                  className="rounded border border-gray-300 bg-white px-4 py-2 text-gray-900 shadow-sm"
+                  className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-gray-900 shadow-sm"
                 >
                   Copy Approval Link
                 </button>
               )}
             </div>
 
-            {approvalLink && (
+            {approvalLink && !isConverted && (
               <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
                 <p className="text-sm font-semibold text-gray-900">
                   Approval Link
@@ -706,133 +758,64 @@ export default function EstimateDetailPage() {
                 <p className="text-sm text-green-800">
                   {formatDate(estimate.approved_at)}
                 </p>
+                {estimate.approved_by_email && (
+                  <p className="text-sm text-green-800">
+                    {estimate.approved_by_email}
+                  </p>
+                )}
               </div>
             )}
           </div>
         </section>
 
-        <section className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-2xl bg-white p-5 shadow">
-            <p className="text-sm text-gray-700">Estimate Total</p>
-            <p className="text-2xl font-semibold text-gray-900">
-              {formatCurrency(estimateAmount)}
-            </p>
-          </div>
-
-          <div className="rounded-2xl bg-white p-5 shadow">
-            <p className="text-sm text-gray-700">Project Expenses</p>
-            <p className="text-2xl font-semibold text-gray-900">
-              {formatCurrency(totalExpenses)}
-            </p>
-          </div>
-
-          <div className="rounded-2xl bg-white p-5 shadow">
-            <p className="text-sm text-gray-700">Projected Profit</p>
-            <p className="text-2xl font-semibold text-gray-900">
-              {formatCurrency(projectProfit)}
-            </p>
-          </div>
-        </section>
-
         <section className="grid gap-6 md:grid-cols-2">
-          <div className="space-y-4 rounded-2xl bg-white p-6 shadow">
+          <div className="space-y-4 rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
             <h2 className="text-xl font-semibold text-gray-900">
               Estimate Info
             </h2>
 
-            <div>
-              <p className="text-sm text-gray-700">Customer Name</p>
-              <p className="text-gray-900">{estimate.customer_name || "—"}</p>
-            </div>
-
-            <div>
-              <p className="text-sm text-gray-700">Job Name</p>
-              <p className="text-gray-900">{estimate.job_name || "—"}</p>
-            </div>
-
-            <div>
-              <p className="text-sm text-gray-700">Project Description</p>
-              <p className="text-gray-900">
-                {estimate.project_description || "—"}
-              </p>
-            </div>
-
-            <div>
-              <p className="text-sm text-gray-700">Markup</p>
-              <p className="text-gray-900">
-                {Number(estimate.markup_percent || 0)}%
-              </p>
-            </div>
-
-            <div>
-              <p className="text-sm text-gray-700">Valid Until</p>
-              <p className="text-gray-900">{formatDate(estimate.valid_until)}</p>
-            </div>
-
-            <div>
-              <p className="text-sm text-gray-700">Notes</p>
-              <p className="text-gray-900">{estimate.notes || "—"}</p>
-            </div>
-
-            <div>
-              <p className="text-sm text-gray-700">Exclusions</p>
-              <p className="text-gray-900">{estimate.exclusions || "—"}</p>
-            </div>
+            <InfoRow label="Customer Name" value={estimate.customer_name} />
+            <InfoRow label="Job Name" value={estimate.job_name} />
+            <InfoRow
+              label="Project Description"
+              value={estimate.project_description}
+            />
+            <InfoRow
+              label="Markup"
+              value={`${Number(estimate.markup_percent || 0)}%`}
+            />
+            <InfoRow label="Valid Until" value={formatDate(estimate.valid_until)} />
+            <InfoRow label="Notes" value={estimate.notes} />
+            <InfoRow label="Exclusions" value={estimate.exclusions} />
           </div>
 
-          <div className="space-y-4 rounded-2xl bg-white p-6 shadow">
+          <div className="space-y-4 rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
             <h2 className="text-xl font-semibold text-gray-900">
               Linked Customer
             </h2>
 
             {customer ? (
               <>
-                <div>
-                  <p className="text-sm text-gray-700">Name</p>
-                  <p className="text-gray-900">{customer.full_name || "—"}</p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-700">Email</p>
-                  <p className="text-gray-900">{customer.email || "—"}</p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-700">Phone</p>
-                  <p className="text-gray-900">{customer.phone || "—"}</p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-700">Address</p>
-                  <p className="text-gray-900">{customer.address || "—"}</p>
-                </div>
+                <InfoRow label="Name" value={customer.full_name} />
+                <InfoRow label="Email" value={customer.email} />
+                <InfoRow label="Phone" value={customer.phone} />
+                <InfoRow label="Address" value={customer.address} />
               </>
             ) : (
               <>
                 <p className="text-gray-800">No linked customer record found.</p>
-
-                <div>
-                  <p className="text-sm text-gray-700">Estimate Email</p>
-                  <p className="text-gray-900">{estimate.customer_email || "—"}</p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-700">Estimate Phone</p>
-                  <p className="text-gray-900">{estimate.customer_phone || "—"}</p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-700">Estimate Address</p>
-                  <p className="text-gray-900">
-                    {estimate.customer_address || "—"}
-                  </p>
-                </div>
+                <InfoRow label="Estimate Email" value={estimate.customer_email} />
+                <InfoRow label="Estimate Phone" value={estimate.customer_phone} />
+                <InfoRow
+                  label="Estimate Address"
+                  value={estimate.customer_address}
+                />
               </>
             )}
           </div>
         </section>
 
-        <section className="space-y-4 rounded-2xl bg-white p-6 shadow">
+        <section className="space-y-4 rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-semibold text-gray-900">
               Project Expenses
@@ -840,7 +823,7 @@ export default function EstimateDetailPage() {
 
             <Link
               href={`/expenses?estimate_id=${estimate.id}`}
-              className="rounded bg-blue-600 px-4 py-2 text-white"
+              className="rounded-xl bg-blue-600 px-4 py-2 text-white"
             >
               + Add Expense
             </Link>
@@ -892,5 +875,20 @@ export default function EstimateDetailPage() {
         </section>
       </div>
     </main>
+  );
+}
+
+function InfoRow({
+  label,
+  value,
+}: {
+  label: string;
+  value?: string | null;
+}) {
+  return (
+    <div>
+      <p className="text-sm text-gray-700">{label}</p>
+      <p className="whitespace-pre-wrap text-gray-900">{value || "—"}</p>
+    </div>
   );
 }
