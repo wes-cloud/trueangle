@@ -31,8 +31,8 @@ type Vehicle = {
   model: string | null;
   vehicle_year: number | null;
   year_tracked: number | null;
-  beginning_odom: number | null;
-  ending_odometer: number | null;
+  beginning_miles: number | null;
+  ending_miles: number | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -99,10 +99,10 @@ export default function MileagePage() {
   const [newVehicleMake, setNewVehicleMake] = useState("");
   const [newVehicleModel, setNewVehicleModel] = useState("");
   const [newVehicleYear, setNewVehicleYear] = useState("");
-  const [newVehicleBeginningOdom, setNewVehicleBeginningOdom] = useState("");
+  const [newVehicleBeginningMiles, setNewVehicleBeginningMiles] = useState("");
 
   const [selectedVehicleId, setSelectedVehicleId] = useState("");
-  const [endingOdometer, setEndingOdometer] = useState("");
+  const [endingMiles, setEndingMiles] = useState("");
 
   const [tripDate, setTripDate] = useState("");
   const [tripType, setTripType] = useState<TripType>("business");
@@ -117,6 +117,7 @@ export default function MileagePage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [pageLoading, setPageLoading] = useState(false);
 
   const selectedVehicle = useMemo(() => {
     return vehicles.find((vehicle) => vehicle.id === selectedVehicleId) || null;
@@ -173,8 +174,8 @@ export default function MileagePage() {
       .filter((log) => log.trip_type === "adjustment")
       .reduce((sum, log) => sum + Number(log.total_miles || 0), 0);
 
-    const beginning = Number(selectedVehicle.beginning_odom || 0);
-    const ending = selectedVehicle.ending_odometer;
+    const beginning = Number(selectedVehicle.beginning_miles || 0);
+    const ending = selectedVehicle.ending_miles;
 
     const odometerMiles =
       ending === null || ending === undefined ? null : Number(ending) - beginning;
@@ -194,12 +195,16 @@ export default function MileagePage() {
   }, [selectedVehicle, selectedVehicleLogs]);
 
   async function fetchCompanyId(currentUserId: string) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("company_members")
       .select("company_id")
       .eq("user_id", currentUserId)
       .limit(1)
       .maybeSingle();
+
+    if (error) {
+      throw new Error(`Error loading company: ${error.message}`);
+    }
 
     const nextCompanyId = data?.company_id || null;
     setCompanyId(nextCompanyId);
@@ -214,8 +219,7 @@ export default function MileagePage() {
       .order("full_name", { ascending: true });
 
     if (error) {
-      setMessage(`Error loading customers: ${error.message}`);
-      return;
+      throw new Error(`Error loading customers: ${error.message}`);
     }
 
     setCustomers((data || []) as Customer[]);
@@ -229,18 +233,20 @@ export default function MileagePage() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      setMessage(`Error loading projects: ${error.message}`);
-      return;
+      throw new Error(`Error loading projects: ${error.message}`);
     }
 
     setEstimates((data || []) as Estimate[]);
   }
 
-  async function fetchVehicles(currentUserId: string, currentCompanyId: string | null) {
+  async function fetchVehicles(
+    currentUserId: string,
+    currentCompanyId: string | null
+  ) {
     let query = supabase
       .from("vehicles")
       .select(
-        "id, company_id, user_id, name, make, model, vehicle_year, year_tracked, beginning_odom, ending_odometer, created_at, updated_at"
+        "id, company_id, user_id, name, make, model, vehicle_year, year_tracked, beginning_miles, ending_miles, created_at, updated_at"
       )
       .eq("year_tracked", selectedYear)
       .order("created_at", { ascending: false });
@@ -254,8 +260,7 @@ export default function MileagePage() {
     const { data, error } = await query;
 
     if (error) {
-      setMessage(`Error loading vehicles: ${error.message}`);
-      return;
+      throw new Error(`Error loading vehicles: ${error.message}`);
     }
 
     const nextVehicles = (data || []) as Vehicle[];
@@ -289,24 +294,39 @@ export default function MileagePage() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      setMessage(`Error loading mileage logs: ${error.message}`);
-      return;
+      throw new Error(`Error loading mileage logs: ${error.message}`);
     }
 
     setLogs((data || []) as MileageLog[]);
   }
 
   async function loadPageData(currentUserId: string) {
+    setPageLoading(true);
     setMessage("");
 
-    const nextCompanyId = await fetchCompanyId(currentUserId);
+    try {
+      const nextCompanyId = await fetchCompanyId(currentUserId);
 
-    await Promise.all([
-      fetchCustomers(currentUserId),
-      fetchEstimates(currentUserId),
-      fetchVehicles(currentUserId, nextCompanyId),
-      fetchLogs(currentUserId),
-    ]);
+      await Promise.all([
+        fetchCustomers(currentUserId),
+        fetchEstimates(currentUserId),
+        fetchVehicles(currentUserId, nextCompanyId),
+        fetchLogs(currentUserId),
+      ]);
+    } catch (err) {
+      const error = err as Error;
+      setMessage(error.message || "Unable to load mileage page.");
+    } finally {
+      setPageLoading(false);
+    }
+  }
+
+  function clearPageState() {
+    setCompanyId(null);
+    setCustomers([]);
+    setEstimates([]);
+    setVehicles([]);
+    setLogs([]);
   }
 
   function resetForm() {
@@ -368,53 +388,57 @@ export default function MileagePage() {
     setSaving(true);
     setMessage("");
 
-    const { error } = await supabase.from("vehicles").insert([
-      {
-        company_id: companyId,
-        user_id: user.id,
-        name: newVehicleName.trim(),
-        make: newVehicleMake.trim() || null,
-        model: newVehicleModel.trim() || null,
-        vehicle_year: newVehicleYear ? Number(newVehicleYear) : null,
-        year_tracked: selectedYear,
-        beginning_odom: newVehicleBeginningOdom
-          ? Number(newVehicleBeginningOdom)
-          : 0,
-        ending_odometer: null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-    ]);
+    try {
+      const { error } = await supabase.from("vehicles").insert([
+        {
+          company_id: companyId,
+          user_id: user.id,
+          name: newVehicleName.trim(),
+          make: newVehicleMake.trim() || null,
+          model: newVehicleModel.trim() || null,
+          vehicle_year: newVehicleYear ? Number(newVehicleYear) : null,
+          year_tracked: selectedYear,
+          beginning_miles: newVehicleBeginningMiles
+            ? Number(newVehicleBeginningMiles)
+            : 0,
+          ending_miles: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ]);
 
-    setSaving(false);
+      if (error) {
+        throw new Error(error.message);
+      }
 
-    if (error) {
+      setNewVehicleName("");
+      setNewVehicleMake("");
+      setNewVehicleModel("");
+      setNewVehicleYear("");
+      setNewVehicleBeginningMiles("");
+      setMessage("Vehicle added.");
+      await loadPageData(user.id);
+    } catch (err) {
+      const error = err as Error;
       setMessage(`Error creating vehicle: ${error.message}`);
-      return;
+    } finally {
+      setSaving(false);
     }
-
-    setNewVehicleName("");
-    setNewVehicleMake("");
-    setNewVehicleModel("");
-    setNewVehicleYear("");
-    setNewVehicleBeginningOdom("");
-    setMessage("Vehicle added successfully.");
-    await loadPageData(user.id);
   }
 
-  async function handleSaveEndingOdometer() {
+  async function handleSaveEndingMiles() {
     if (!user || !selectedVehicle) {
       setMessage("Select a vehicle first.");
       return;
     }
 
-    if (!endingOdometer) {
+    if (!endingMiles) {
       setMessage("Enter an ending odometer reading.");
       return;
     }
 
-    const ending = Number(endingOdometer);
-    const beginning = Number(selectedVehicle.beginning_odom || 0);
+    const ending = Number(endingMiles);
+    const beginning = Number(selectedVehicle.beginning_miles || 0);
 
     if (ending < beginning) {
       setMessage("Ending odometer cannot be less than beginning odometer.");
@@ -424,24 +448,28 @@ export default function MileagePage() {
     setSaving(true);
     setMessage("");
 
-    const { error } = await supabase
-      .from("vehicles")
-      .update({
-        ending_odometer: ending,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", selectedVehicle.id);
+    try {
+      const { error } = await supabase
+        .from("vehicles")
+        .update({
+          ending_miles: ending,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", selectedVehicle.id);
 
-    setSaving(false);
+      if (error) {
+        throw new Error(error.message);
+      }
 
-    if (error) {
+      setEndingMiles("");
+      setMessage("Ending odometer saved.");
+      await loadPageData(user.id);
+    } catch (err) {
+      const error = err as Error;
       setMessage(`Error saving ending odometer: ${error.message}`);
-      return;
+    } finally {
+      setSaving(false);
     }
-
-    setEndingOdometer("");
-    setMessage("Ending odometer saved.");
-    await loadPageData(user.id);
   }
 
   async function handleDeleteLog(id: string) {
@@ -450,23 +478,29 @@ export default function MileagePage() {
       return;
     }
 
-    const { error } = await supabase
-      .from("mileage_logs")
-      .delete()
-      .eq("id", id)
-      .eq("user_id", user.id);
+    setMessage("");
 
-    if (error) {
+    try {
+      const { error } = await supabase
+        .from("mileage_logs")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", user.id);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      if (editingId === id) {
+        resetForm();
+      }
+
+      setMessage("Mileage log deleted.");
+      await loadPageData(user.id);
+    } catch (err) {
+      const error = err as Error;
       setMessage(`Error deleting mileage log: ${error.message}`);
-      return;
     }
-
-    if (editingId === id) {
-      resetForm();
-    }
-
-    setMessage("Mileage log deleted successfully.");
-    await loadPageData(user.id);
   }
 
   async function handleSaveLog(e: FormEvent<HTMLFormElement>) {
@@ -529,43 +563,44 @@ export default function MileagePage() {
     setSaving(true);
     setMessage("");
 
-    if (editingId) {
-      const { error } = await supabase
-        .from("mileage_logs")
-        .update(payload)
-        .eq("id", editingId)
-        .eq("user_id", user.id);
+    try {
+      if (editingId) {
+        const { error } = await supabase
+          .from("mileage_logs")
+          .update(payload)
+          .eq("id", editingId)
+          .eq("user_id", user.id);
 
-      setSaving(false);
+        if (error) {
+          throw new Error(error.message);
+        }
 
-      if (error) {
-        setMessage(`Error updating mileage log: ${error.message}`);
+        setMessage("Mileage log updated.");
+        resetForm();
+        await loadPageData(user.id);
         return;
       }
 
-      setMessage("Mileage log updated successfully.");
+      const { error } = await supabase.from("mileage_logs").insert([
+        {
+          ...payload,
+          created_at: new Date().toISOString(),
+        },
+      ]);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      setMessage("Mileage log saved.");
       resetForm();
       await loadPageData(user.id);
-      return;
-    }
-
-    const { error } = await supabase.from("mileage_logs").insert([
-      {
-        ...payload,
-        created_at: new Date().toISOString(),
-      },
-    ]);
-
-    setSaving(false);
-
-    if (error) {
+    } catch (err) {
+      const error = err as Error;
       setMessage(`Error saving mileage log: ${error.message}`);
-      return;
+    } finally {
+      setSaving(false);
     }
-
-    setMessage("Mileage log saved successfully.");
-    resetForm();
-    await loadPageData(user.id);
   }
 
   async function handleAddReconciliationAdjustment() {
@@ -596,34 +631,42 @@ export default function MileagePage() {
     };
 
     setSaving(true);
+    setMessage("");
 
-    const { error } = await supabase.from("mileage_logs").insert([payload]);
+    try {
+      const { error } = await supabase.from("mileage_logs").insert([payload]);
 
-    setSaving(false);
+      if (error) {
+        throw new Error(error.message);
+      }
 
-    if (error) {
+      setMessage("Reconciliation adjustment added.");
+      await loadPageData(user.id);
+    } catch (err) {
+      const error = err as Error;
       setMessage(`Error adding adjustment: ${error.message}`);
-      return;
+    } finally {
+      setSaving(false);
     }
-
-    setMessage("Reconciliation adjustment added.");
-    await loadPageData(user.id);
   }
 
   async function handleSignOut() {
-    const { error } = await supabase.auth.signOut();
+    setMessage("");
 
-    if (error) {
+    try {
+      const { error } = await supabase.auth.signOut();
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      setUser(null);
+      clearPageState();
+      window.location.href = "/";
+    } catch (err) {
+      const error = err as Error;
       setMessage(`Sign out error: ${error.message}`);
-      return;
     }
-
-    setUser(null);
-    setCustomers([]);
-    setEstimates([]);
-    setVehicles([]);
-    setLogs([]);
-    setMessage("Signed out.");
   }
 
   useEffect(() => {
@@ -649,32 +692,50 @@ export default function MileagePage() {
   }, [selectedYear]);
 
   useEffect(() => {
+    let isMounted = true;
+
     async function loadUser() {
-      const {
-        data: { user: authUser },
-        error,
-      } = await supabase.auth.getUser();
+      setAuthLoading(true);
+      setMessage("");
 
-      if (error) {
-        setMessage(error.message);
-        setAuthLoading(false);
-        return;
+      try {
+        const {
+          data: { user: authUser },
+          error,
+        } = await supabase.auth.getUser();
+
+        if (error) {
+          throw new Error(error.message);
+        }
+
+        const safeUser = authUser
+          ? {
+              id: authUser.id,
+              email: authUser.email ?? null,
+            }
+          : null;
+
+        if (!isMounted) return;
+
+        setUser(safeUser);
+
+        if (safeUser) {
+          await loadPageData(safeUser.id);
+        } else {
+          clearPageState();
+        }
+      } catch (err) {
+        const error = err as Error;
+
+        if (isMounted) {
+          setMessage(error.message || "Unable to load mileage page.");
+          clearPageState();
+        }
+      } finally {
+        if (isMounted) {
+          setAuthLoading(false);
+        }
       }
-
-      const safeUser = authUser
-        ? {
-            id: authUser.id,
-            email: authUser.email ?? null,
-          }
-        : null;
-
-      setUser(safeUser);
-
-      if (safeUser) {
-        await loadPageData(safeUser.id);
-      }
-
-      setAuthLoading(false);
     }
 
     loadUser();
@@ -694,16 +755,14 @@ export default function MileagePage() {
       if (nextUser) {
         await loadPageData(nextUser.id);
       } else {
-        setCustomers([]);
-        setEstimates([]);
-        setVehicles([]);
-        setLogs([]);
+        clearPageState();
       }
 
       setAuthLoading(false);
     });
 
     return () => {
+      isMounted = false;
       subscription.unsubscribe();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -713,7 +772,7 @@ export default function MileagePage() {
     return (
       <main className="min-h-screen bg-gray-100 p-8">
         <div className="mx-auto max-w-md rounded-2xl bg-white p-8 shadow">
-          <p className="text-gray-900">Loading...</p>
+          <p className="text-gray-900">Loading mileage...</p>
         </div>
       </main>
     );
@@ -724,9 +783,13 @@ export default function MileagePage() {
       <main className="min-h-screen bg-gray-100 p-8">
         <div className="mx-auto max-w-md rounded-2xl bg-white p-8 shadow">
           <h1 className="text-3xl font-bold text-gray-900">Mileage</h1>
-          <p className="mt-3 text-gray-600">
-            You need to sign in from the dashboard first.
-          </p>
+          <p className="mt-3 text-gray-600">You need to sign in first.</p>
+          <a
+            href="/auth"
+            className="mt-5 inline-block rounded-xl bg-black px-4 py-2 font-semibold text-white"
+          >
+            Sign in
+          </a>
         </div>
       </main>
     );
@@ -749,6 +812,11 @@ export default function MileagePage() {
               <p className="mt-1 text-sm text-gray-600">
                 Signed in as {user.email || "User"}
               </p>
+              {pageLoading && (
+                <p className="mt-2 text-sm font-semibold text-gray-600">
+                  Refreshing mileage...
+                </p>
+              )}
             </div>
 
             <div className="grid gap-3 md:grid-cols-3">
@@ -784,6 +852,12 @@ export default function MileagePage() {
           </div>
         </div>
 
+        {message && (
+          <div className="rounded-xl bg-white p-4 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-gray-200">
+            {message}
+          </div>
+        )}
+
         <div className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
           <h2 className="text-2xl font-bold text-gray-900">Set Vehicle</h2>
           <p className="mt-1 text-sm text-gray-600">
@@ -792,10 +866,7 @@ export default function MileagePage() {
 
           <form onSubmit={handleCreateVehicle} className="mt-6 space-y-4">
             <div className="grid gap-4 md:grid-cols-5">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
-                  Vehicle Name
-                </label>
+              <Field label="Vehicle Name">
                 <input
                   type="text"
                   value={newVehicleName}
@@ -804,12 +875,9 @@ export default function MileagePage() {
                   placeholder="Work Truck"
                   required
                 />
-              </div>
+              </Field>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
-                  Year
-                </label>
+              <Field label="Year">
                 <input
                   type="number"
                   value={newVehicleYear}
@@ -817,12 +885,9 @@ export default function MileagePage() {
                   className="w-full rounded-lg border p-3 text-gray-900"
                   placeholder="2019"
                 />
-              </div>
+              </Field>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
-                  Make
-                </label>
+              <Field label="Make">
                 <input
                   type="text"
                   value={newVehicleMake}
@@ -830,12 +895,9 @@ export default function MileagePage() {
                   className="w-full rounded-lg border p-3 text-gray-900"
                   placeholder="Ford"
                 />
-              </div>
+              </Field>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
-                  Model
-                </label>
+              <Field label="Model">
                 <input
                   type="text"
                   value={newVehicleModel}
@@ -843,28 +905,25 @@ export default function MileagePage() {
                   className="w-full rounded-lg border p-3 text-gray-900"
                   placeholder="F-250"
                 />
-              </div>
+              </Field>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
-                  Beginning Odometer
-                </label>
+              <Field label="Beginning Odometer">
                 <input
                   type="number"
                   step="0.1"
-                  value={newVehicleBeginningOdom}
-                  onChange={(e) => setNewVehicleBeginningOdom(e.target.value)}
+                  value={newVehicleBeginningMiles}
+                  onChange={(e) => setNewVehicleBeginningMiles(e.target.value)}
                   className="w-full rounded-lg border p-3 text-gray-900"
                   placeholder="45000"
                 />
-              </div>
+              </Field>
             </div>
 
             <button
               disabled={saving}
               className="rounded-xl bg-black px-4 py-2 text-white disabled:opacity-50"
             >
-              Add Vehicle
+              {saving ? "Saving..." : "Add Vehicle"}
             </button>
           </form>
         </div>
@@ -893,10 +952,7 @@ export default function MileagePage() {
 
           <form onSubmit={handleSaveLog} className="space-y-6">
             <div className="grid gap-4 md:grid-cols-3">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
-                  Vehicle
-                </label>
+              <Field label="Vehicle">
                 <select
                   value={selectedVehicleId}
                   onChange={(e) => setSelectedVehicleId(e.target.value)}
@@ -910,12 +966,9 @@ export default function MileagePage() {
                     </option>
                   ))}
                 </select>
-              </div>
+              </Field>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
-                  Trip Date
-                </label>
+              <Field label="Trip Date">
                 <input
                   type="date"
                   value={tripDate}
@@ -923,12 +976,9 @@ export default function MileagePage() {
                   className="w-full rounded-lg border p-3 text-gray-900"
                   required
                 />
-              </div>
+              </Field>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
-                  Trip Type
-                </label>
+              <Field label="Trip Type">
                 <select
                   value={tripType}
                   onChange={(e) => setTripType(e.target.value as TripType)}
@@ -940,14 +990,11 @@ export default function MileagePage() {
                   <option value="commute">Commute</option>
                   <option value="adjustment">Adjustment</option>
                 </select>
-              </div>
+              </Field>
             </div>
 
             <div className="grid gap-4 md:grid-cols-3">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
-                  Start Miles
-                </label>
+              <Field label="Start Miles">
                 <input
                   type="number"
                   step="0.1"
@@ -956,12 +1003,9 @@ export default function MileagePage() {
                   className="w-full rounded-lg border p-3 text-gray-900"
                   placeholder="12000.0"
                 />
-              </div>
+              </Field>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
-                  End Miles
-                </label>
+              <Field label="End Miles">
                 <input
                   type="number"
                   step="0.1"
@@ -970,12 +1014,9 @@ export default function MileagePage() {
                   className="w-full rounded-lg border p-3 text-gray-900"
                   placeholder="12015.4"
                 />
-              </div>
+              </Field>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
-                  Total Miles
-                </label>
+              <Field label="Total Miles">
                 <input
                   type="number"
                   step="0.1"
@@ -985,14 +1026,11 @@ export default function MileagePage() {
                   placeholder="12.5"
                   required
                 />
-              </div>
+              </Field>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
-                  Customer
-                </label>
+              <Field label="Customer">
                 <select
                   value={selectedCustomerId}
                   onChange={(e) => setSelectedCustomerId(e.target.value)}
@@ -1005,12 +1043,9 @@ export default function MileagePage() {
                     </option>
                   ))}
                 </select>
-              </div>
+              </Field>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
-                  Project / Estimate
-                </label>
+              <Field label="Project / Estimate">
                 <select
                   value={selectedEstimateId}
                   onChange={(e) => handleEstimateChange(e.target.value)}
@@ -1025,13 +1060,10 @@ export default function MileagePage() {
                     </option>
                   ))}
                 </select>
-              </div>
+              </Field>
             </div>
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-900">
-                Purpose
-              </label>
+            <Field label="Purpose">
               <input
                 type="text"
                 value={purpose}
@@ -1039,28 +1071,23 @@ export default function MileagePage() {
                 className="w-full rounded-lg border p-3 text-gray-900"
                 placeholder="Site visit, estimate meeting, material pickup"
               />
-            </div>
+            </Field>
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-900">
-                Notes
-              </label>
+            <Field label="Notes">
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 className="min-h-[100px] w-full rounded-lg border p-3 text-gray-900"
                 placeholder="Optional notes"
               />
-            </div>
+            </Field>
 
             <button
               disabled={saving}
               className="rounded-xl bg-black px-4 py-2 text-white disabled:opacity-50"
             >
-              {editingId ? "Update Log" : "Save Log"}
+              {saving ? "Saving..." : editingId ? "Update Log" : "Save Log"}
             </button>
-
-            {message && <p className="text-gray-900">{message}</p>}
           </form>
         </div>
 
@@ -1077,14 +1104,14 @@ export default function MileagePage() {
               <div className="grid gap-4 md:grid-cols-4">
                 <SummaryCard
                   label="Beginning"
-                  value={formatMiles(selectedVehicle.beginning_odom)}
+                  value={formatMiles(selectedVehicle.beginning_miles)}
                 />
                 <SummaryCard
                   label="Ending"
                   value={
-                    selectedVehicle.ending_odometer === null
+                    selectedVehicle.ending_miles === null
                       ? "Not set"
-                      : formatMiles(selectedVehicle.ending_odometer)
+                      : formatMiles(selectedVehicle.ending_miles)
                   }
                 />
                 <SummaryCard
@@ -1128,15 +1155,15 @@ export default function MileagePage() {
                 <input
                   type="number"
                   step="0.1"
-                  value={endingOdometer}
-                  onChange={(e) => setEndingOdometer(e.target.value)}
+                  value={endingMiles}
+                  onChange={(e) => setEndingMiles(e.target.value)}
                   className="rounded-lg border p-3 text-gray-900"
                   placeholder="Ending odometer"
                 />
 
                 <button
                   type="button"
-                  onClick={handleSaveEndingOdometer}
+                  onClick={handleSaveEndingMiles}
                   disabled={saving}
                   className="rounded-xl border border-gray-300 px-4 py-2 text-gray-900 disabled:opacity-50"
                 >
@@ -1264,6 +1291,23 @@ export default function MileagePage() {
         </div>
       </div>
     </main>
+  );
+}
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-sm font-medium text-gray-900">
+        {label}
+      </label>
+      {children}
+    </div>
   );
 }
 
