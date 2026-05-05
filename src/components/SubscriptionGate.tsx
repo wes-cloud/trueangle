@@ -33,18 +33,71 @@ export default function SubscriptionGate({
         return;
       }
 
-      const { data, error } = await supabase
+      // 1. First check if this user has their own subscription.
+      const { data: ownSubscription } = await supabase
         .from("subscriptions")
         .select("status")
         .eq("user_id", user.id)
         .maybeSingle();
 
-      if (error || !data) {
+      if (
+        ownSubscription?.status === "trialing" ||
+        ownSubscription?.status === "active"
+      ) {
+        setStatus("allowed");
+        return;
+      }
+
+      // 2. If not, check if this user belongs to a company.
+      const { data: memberships, error: membershipError } = await supabase
+        .from("company_members")
+        .select("company_id, role")
+        .eq("user_id", user.id)
+        .limit(1);
+
+      if (membershipError || !memberships || memberships.length === 0) {
         setStatus("blocked");
         return;
       }
 
-      if (data.status === "trialing" || data.status === "active") {
+      const membership = memberships[0];
+
+      if (!membership.company_id) {
+        setStatus("blocked");
+        return;
+      }
+
+      // 3. Find the owner of that company.
+      const { data: owners, error: ownerError } = await supabase
+        .from("company_members")
+        .select("user_id")
+        .eq("company_id", membership.company_id)
+        .eq("role", "owner")
+        .limit(1);
+
+      if (ownerError || !owners || owners.length === 0) {
+        setStatus("blocked");
+        return;
+      }
+
+      const ownerUserId = owners[0].user_id;
+
+      if (!ownerUserId) {
+        setStatus("blocked");
+        return;
+      }
+
+      // 4. Check if the company owner has an active/trialing subscription.
+      const { data: ownerSubscription } = await supabase
+        .from("subscriptions")
+        .select("status")
+        .eq("user_id", ownerUserId)
+        .maybeSingle();
+
+      if (
+        ownerSubscription?.status === "trialing" ||
+        ownerSubscription?.status === "active"
+      ) {
         setStatus("allowed");
         return;
       }
