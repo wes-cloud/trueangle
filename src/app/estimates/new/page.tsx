@@ -98,6 +98,7 @@ type DraftLineItem = {
   rate: string;
   unit: string;
   saveAsPreset: boolean;
+  isCustom: boolean;
 };
 
 function formatCurrency(value: number) {
@@ -144,6 +145,7 @@ function makeDefaultLineItem(): DraftLineItem {
     rate: defaultLaborRates.Framing.rate.toString(),
     unit: defaultLaborRates.Framing.unit,
     saveAsPreset: false,
+isCustom: false,
   };
 }
 
@@ -251,27 +253,27 @@ export default function EstimatesNewPage() {
         if (field === "type") {
           const nextType = String(value);
 
-          if (nextType === "__custom__") {
-            return {
-              ...item,
-              type: "",
-              rate: "",
-              unit: "flat amount",
-              saveAsPreset: true,
-            };
-          }
+if (nextType === "__custom__") {
+  return {
+    ...item,
+    type: "",
+    rate: "",
+    unit: "flat amount",
+    saveAsPreset: true,
+    isCustom: true,
+  };
+}
 
           const selectedPreset = presetOptions[nextType];
 
-          return {
-            ...item,
-            type: nextType,
-            rate: selectedPreset
-              ? String(selectedPreset.rate)
-              : item.rate,
-            unit: selectedPreset?.unit || item.unit || "flat amount",
-            saveAsPreset: false,
-          };
+return {
+  ...item,
+  type: nextType,
+  rate: selectedPreset ? String(selectedPreset.rate) : item.rate,
+  unit: selectedPreset?.unit || item.unit || "flat amount",
+  saveAsPreset: false,
+  isCustom: false,
+};
         }
 
         return {
@@ -736,6 +738,7 @@ export default function EstimatesNewPage() {
       rate: String(item.rate),
       unit: presetOptions[item.type]?.unit || "custom",
       saveAsPreset: false,
+isCustom: !presetOptions[item.type],
     }));
 
     setLineItems(
@@ -980,8 +983,7 @@ export default function EstimatesNewPage() {
                   Number(item.quantity || 0) * Number(item.rate || 0);
 
                 const presetNames = Object.keys(presetOptions);
-                const isCustomType =
-                  item.type !== "" && !presetNames.includes(item.type);
+                const isCustomType = item.isCustom;
 
                 return (
                   <div
