@@ -122,12 +122,14 @@ export default function SettingsPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setMessage(data.error || "Could not add bookkeeper.");
+        alert(data.error || "Could not add bookkeeper.");
+setMessage(data.error || "Could not add bookkeeper.");
         return;
       }
 
       setBookkeeperEmail("");
-      setMessage("Bookkeeper added. Hopefully they know what they're doing.");
+      alert("Bookkeeper added successfully.");
+setMessage("Bookkeeper added. Hopefully they know what they're doing.");
     } catch (err) {
       console.error(err);
       setMessage("Something went wrong adding the bookkeeper.");

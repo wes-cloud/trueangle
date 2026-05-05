@@ -12,40 +12,33 @@ export async function POST(req: Request) {
 
     if (!email || !ownerUserId) {
       return NextResponse.json(
-        { error: "Missing email or owner user ID" },
+        { error: "Missing email or owner user ID." },
         { status: 400 }
       );
     }
 
-    // 1. Find owner’s company
-    const { data: ownerMembership, error: ownerError } =
-      await supabaseAdmin
-        .from("company_members")
-        .select("company_id, role")
-        .eq("user_id", ownerUserId)
-        .maybeSingle();
+    const { data: ownerMemberships, error: ownerError } = await supabaseAdmin
+      .from("company_members")
+      .select("company_id, role")
+      .eq("user_id", ownerUserId)
+      .eq("role", "owner")
+      .limit(1);
+
+    const ownerMembership = ownerMemberships?.[0];
 
     if (ownerError || !ownerMembership?.company_id) {
       return NextResponse.json(
-        { error: "Owner not associated with a company" },
+        { error: "Owner not associated with a company." },
         { status: 400 }
       );
     }
 
-    if (ownerMembership.role !== "owner") {
-      return NextResponse.json(
-        { error: "Only owners can add users" },
-        { status: 403 }
-      );
-    }
-
-    // 2. Find user by email
     const { data: users, error: userLookupError } =
       await supabaseAdmin.auth.admin.listUsers();
 
     if (userLookupError) {
       return NextResponse.json(
-        { error: "Error looking up users" },
+        { error: "Error looking up users." },
         { status: 500 }
       );
     }
@@ -56,27 +49,25 @@ export async function POST(req: Request) {
 
     if (!matchedUser) {
       return NextResponse.json(
-        { error: "User not found. They must sign up first." },
+        { error: "User not found. They must create a free account first." },
         { status: 404 }
       );
     }
 
-    // 3. Check if already in company
     const { data: existing } = await supabaseAdmin
       .from("company_members")
       .select("id")
       .eq("company_id", ownerMembership.company_id)
       .eq("user_id", matchedUser.id)
-      .maybeSingle();
+      .limit(1);
 
-    if (existing) {
+    if (existing && existing.length > 0) {
       return NextResponse.json(
-        { error: "User already added to company" },
+        { error: "User is already added to this company." },
         { status: 400 }
       );
     }
 
-    // 4. Enforce 1 bookkeeper max (for now)
     const { data: existingBookkeepers } = await supabaseAdmin
       .from("company_members")
       .select("id")
@@ -90,7 +81,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // 5. Insert new bookkeeper
     const { error: insertError } = await supabaseAdmin
       .from("company_members")
       .insert({
@@ -108,13 +98,10 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      message: "Bookkeeper added successfully",
+      message: "Bookkeeper added successfully.",
     });
   } catch (err) {
     const error = err as Error;
-    return NextResponse.json(
-      { error: error.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
