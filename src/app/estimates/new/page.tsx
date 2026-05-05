@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import AppNav from "@/components/AppNav";
 
-const laborRates: Record<string, { rate: number; unit: string }> = {
+const defaultLaborRates: Record<string, { rate: number; unit: string }> = {
   Demo: { rate: 80, unit: "per hour" },
   Framing: { rate: 30, unit: "per linear foot" },
   Electrical: { rate: 110, unit: "per hour" },
@@ -25,16 +25,17 @@ const laborRates: Record<string, { rate: number; unit: string }> = {
   Other: { rate: 0, unit: "flat amount" },
 };
 
-const companyInfo = {
-  name: "WW Contracting",
-  phone: "(360) 777-6674",
-  email: "wes@weswhitecontracting.com",
-  address: "Mount Vernon, WA",
-};
-
 type AuthUser = {
   id: string;
   email?: string | null;
+};
+
+type LineItemPreset = {
+  id: string;
+  user_id: string;
+  name: string;
+  default_rate: number;
+  default_unit: string;
 };
 
 type LineItem = {
@@ -95,6 +96,8 @@ type DraftLineItem = {
   type: string;
   quantity: string;
   rate: string;
+  unit: string;
+  saveAsPreset: boolean;
 };
 
 function formatCurrency(value: number) {
@@ -109,15 +112,6 @@ function formatDate(value?: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString("en-US");
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
 }
 
 function buildEstimateNumber() {
@@ -142,252 +136,21 @@ function getEstimateExpenseTotal(expenses: Expense[], estimateId: string) {
     .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
 }
 
-function getUnitForType(type: string) {
-  return laborRates[type]?.unit || "custom";
-}
-
-function generateEstimateHtml(estimate: Estimate) {
-  const subtotal = getLineItemsTotal(estimate.line_items);
-  const markupPercent = Number(estimate.markup_percent ?? 0);
-  const markupAmount = subtotal * (markupPercent / 100);
-  const total = subtotal + markupAmount;
-
-  const lineItemsHtml = estimate.line_items
-    .map((item) => {
-      const lineTotal = Number(item.quantity) * Number(item.rate);
-      return `
-        <tr>
-          <td>${escapeHtml(item.type)}</td>
-          <td style="text-align:right;">${item.quantity}</td>
-          <td style="text-align:right;">${formatCurrency(Number(item.rate))}</td>
-          <td style="text-align:right;">${formatCurrency(lineTotal)}</td>
-        </tr>
-      `;
-    })
-    .join("");
-
-  return `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <title>${escapeHtml(estimate.estimate_number || "Estimate")}</title>
-        <style>
-          * { box-sizing: border-box; }
-          body {
-            font-family: Arial, sans-serif;
-            color: #111827;
-            margin: 0;
-            padding: 32px;
-            background: #ffffff;
-          }
-          .page {
-            max-width: 850px;
-            margin: 0 auto;
-          }
-          .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 24px;
-            margin-bottom: 32px;
-          }
-          .title {
-            font-size: 32px;
-            font-weight: 700;
-            margin: 0 0 8px;
-          }
-          .subtitle {
-            font-size: 14px;
-            color: #4b5563;
-            margin: 0;
-          }
-          .section {
-            margin-bottom: 24px;
-          }
-          .grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-          }
-          .card {
-            border: 1px solid #e5e7eb;
-            border-radius: 12px;
-            padding: 16px;
-          }
-          .label {
-            font-size: 12px;
-            font-weight: 700;
-            color: #6b7280;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-            margin-bottom: 8px;
-          }
-          h3 {
-            margin: 0 0 10px;
-            font-size: 18px;
-          }
-          p {
-            margin: 4px 0;
-            line-height: 1.5;
-          }
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 8px;
-          }
-          th, td {
-            padding: 12px 10px;
-            border-bottom: 1px solid #e5e7eb;
-            vertical-align: top;
-          }
-          th {
-            text-align: left;
-            background: #f9fafb;
-            font-size: 13px;
-          }
-          .totals {
-            width: 320px;
-            margin-left: auto;
-            margin-top: 20px;
-          }
-          .totals-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 8px 0;
-          }
-          .totals-row.total {
-            border-top: 2px solid #111827;
-            font-weight: 700;
-            font-size: 18px;
-            margin-top: 6px;
-            padding-top: 12px;
-          }
-          .signature {
-            margin-top: 48px;
-          }
-          .signature-line {
-            margin-top: 40px;
-            border-top: 1px solid #111827;
-            width: 320px;
-            padding-top: 8px;
-          }
-          @media print {
-            body {
-              padding: 0.5in;
-            }
-            .page {
-              max-width: 100%;
-            }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="page">
-          <div class="header">
-            <div>
-              <h1 class="title">${escapeHtml(companyInfo.name)}</h1>
-              <p class="subtitle">${escapeHtml(companyInfo.address)}</p>
-              <p class="subtitle">${escapeHtml(companyInfo.phone)} • ${escapeHtml(companyInfo.email)}</p>
-            </div>
-            <div class="card" style="min-width: 260px;">
-              <div class="label">Estimate</div>
-              <p><strong>Estimate #:</strong> ${escapeHtml(estimate.estimate_number || "")}</p>
-              <p><strong>Date:</strong> ${formatDate(estimate.created_at)}</p>
-              <p><strong>Valid Until:</strong> ${formatDate(estimate.valid_until)}</p>
-            </div>
-          </div>
-
-          <div class="grid section">
-            <div class="card">
-              <div class="label">Customer</div>
-              <p><strong>${escapeHtml(estimate.customer_name)}</strong></p>
-              ${estimate.customer_address ? `<p>${escapeHtml(estimate.customer_address)}</p>` : ""}
-              ${estimate.customer_phone ? `<p>${escapeHtml(estimate.customer_phone)}</p>` : ""}
-              ${estimate.customer_email ? `<p>${escapeHtml(estimate.customer_email)}</p>` : ""}
-            </div>
-
-            <div class="card">
-              <div class="label">Project</div>
-              <p><strong>${escapeHtml(estimate.job_name)}</strong></p>
-              ${estimate.project_description ? `<p>${escapeHtml(estimate.project_description)}</p>` : ""}
-            </div>
-          </div>
-
-          <div class="section">
-            <h3>Line Items</h3>
-            <table>
-              <thead>
-                <tr>
-                  <th>Description</th>
-                  <th style="text-align:right;">Qty</th>
-                  <th style="text-align:right;">Rate</th>
-                  <th style="text-align:right;">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${lineItemsHtml}
-              </tbody>
-            </table>
-
-            <div class="totals">
-              <div class="totals-row">
-                <span>Subtotal</span>
-                <span>${formatCurrency(subtotal)}</span>
-              </div>
-              <div class="totals-row">
-                <span>Markup (${markupPercent}%)</span>
-                <span>${formatCurrency(markupAmount)}</span>
-              </div>
-              <div class="totals-row total">
-                <span>Total</span>
-                <span>${formatCurrency(total)}</span>
-              </div>
-            </div>
-          </div>
-
-          ${
-            estimate.notes
-              ? `
-                <div class="section card">
-                  <div class="label">Notes</div>
-                  <p>${escapeHtml(estimate.notes)}</p>
-                </div>
-              `
-              : ""
-          }
-
-          ${
-            estimate.exclusions
-              ? `
-                <div class="section card">
-                  <div class="label">Exclusions</div>
-                  <p>${escapeHtml(estimate.exclusions)}</p>
-                </div>
-              `
-              : ""
-          }
-
-          <div class="signature">
-            <div class="label">Acceptance</div>
-            <p>By signing below, the customer accepts this estimate and authorizes work to proceed according to the terms outlined above.</p>
-
-            <div style="display:flex; gap:48px; flex-wrap:wrap; margin-top:20px;">
-              <div>
-                <div class="signature-line">Customer Signature</div>
-              </div>
-              <div>
-                <div class="signature-line">Date</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </body>
-    </html>
-  `;
+function makeDefaultLineItem(): DraftLineItem {
+  return {
+    id: Date.now(),
+    type: "Framing",
+    quantity: "",
+    rate: defaultLaborRates.Framing.rate.toString(),
+    unit: defaultLaborRates.Framing.unit,
+    saveAsPreset: false,
+  };
 }
 
 export default function EstimatesNewPage() {
   const [authLoading, setAuthLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
   const [user, setUser] = useState<AuthUser | null>(null);
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
@@ -396,6 +159,7 @@ export default function EstimatesNewPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [estimates, setEstimates] = useState<Estimate[]>([]);
+  const [lineItemPresets, setLineItemPresets] = useState<LineItemPreset[]>([]);
 
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [isNewCustomer, setIsNewCustomer] = useState(true);
@@ -415,13 +179,34 @@ export default function EstimatesNewPage() {
   const [message, setMessage] = useState("");
 
   const [lineItems, setLineItems] = useState<DraftLineItem[]>([
-    {
-      id: 1,
-      type: "Framing",
-      quantity: "",
-      rate: laborRates.Framing.rate.toString(),
-    },
+    makeDefaultLineItem(),
   ]);
+
+  const presetOptions = useMemo(() => {
+    const customOptions = lineItemPresets.reduce<
+      Record<string, { rate: number; unit: string }>
+    >((acc, preset) => {
+      acc[preset.name] = {
+        rate: Number(preset.default_rate || 0),
+        unit: preset.default_unit || "flat amount",
+      };
+      return acc;
+    }, {});
+
+    return {
+      ...defaultLaborRates,
+      ...customOptions,
+    };
+  }, [lineItemPresets]);
+
+  const costTotal = lineItems.reduce((total, item) => {
+    const quantity = Number(item.quantity || 0);
+    const rate = Number(item.rate || 0);
+    return total + quantity * rate;
+  }, 0);
+
+  const markupAmount = costTotal * (Number(markupPercent || 0) / 100);
+  const sellingPrice = costTotal + markupAmount;
 
   function resetForm() {
     setSelectedCustomerId("");
@@ -438,55 +223,54 @@ export default function EstimatesNewPage() {
     setEstimateNumber(buildEstimateNumber());
     setMarkupPercent("0");
     setEditingId(null);
-    setLineItems([
-      {
-        id: 1,
-        type: "Framing",
-        quantity: "",
-        rate: laborRates.Framing.rate.toString(),
-      },
-    ]);
+    setLineItems([makeDefaultLineItem()]);
   }
 
   function clearAppState() {
     setCustomers([]);
     setExpenses([]);
     setEstimates([]);
+    setLineItemPresets([]);
     setMessage("");
     resetForm();
   }
 
   function addLineItem() {
-    setLineItems((prev) => [
-      ...prev,
-      {
-        id: Date.now(),
-        type: "Framing",
-        quantity: "",
-        rate: laborRates.Framing.rate.toString(),
-      },
-    ]);
+    setLineItems((prev) => [...prev, makeDefaultLineItem()]);
   }
 
   function updateLineItem(
     id: number,
     field: keyof DraftLineItem,
-    value: string
+    value: string | boolean
   ) {
     setLineItems((prev) =>
       prev.map((item) => {
         if (item.id !== id) return item;
 
         if (field === "type") {
-          const selectedRate = laborRates[value];
+          const nextType = String(value);
+
+          if (nextType === "__custom__") {
+            return {
+              ...item,
+              type: "",
+              rate: "",
+              unit: "flat amount",
+              saveAsPreset: true,
+            };
+          }
+
+          const selectedPreset = presetOptions[nextType];
 
           return {
             ...item,
-            type: value,
-            rate:
-              selectedRate && value !== "Materials" && value !== "Other"
-                ? selectedRate.rate.toString()
-                : item.rate,
+            type: nextType,
+            rate: selectedPreset
+              ? String(selectedPreset.rate)
+              : item.rate,
+            unit: selectedPreset?.unit || item.unit || "flat amount",
+            saveAsPreset: false,
           };
         }
 
@@ -524,15 +308,6 @@ export default function EstimatesNewPage() {
     setCustomerPhone(selected.phone || "");
   }
 
-  const costTotal = lineItems.reduce((total, item) => {
-    const quantity = Number(item.quantity || 0);
-    const rate = Number(item.rate || 0);
-    return total + quantity * rate;
-  }, 0);
-
-  const markupAmount = costTotal * (Number(markupPercent || 0) / 100);
-  const sellingPrice = costTotal + markupAmount;
-
   async function fetchCustomers(currentUserId: string) {
     const { data, error } = await supabase
       .from("customers")
@@ -546,6 +321,21 @@ export default function EstimatesNewPage() {
     }
 
     setCustomers((data || []) as Customer[]);
+  }
+
+  async function fetchLineItemPresets(currentUserId: string) {
+    const { data, error } = await supabase
+      .from("line_item_presets")
+      .select("*")
+      .eq("user_id", currentUserId)
+      .order("name", { ascending: true });
+
+    if (error) {
+      setMessage(`Error loading line item presets: ${error.message}`);
+      return;
+    }
+
+    setLineItemPresets((data || []) as LineItemPreset[]);
   }
 
   async function fetchEstimates(currentUserId: string) {
@@ -601,6 +391,7 @@ export default function EstimatesNewPage() {
       fetchCustomers(currentUserId),
       fetchEstimates(currentUserId),
       fetchExpenses(currentUserId),
+      fetchLineItemPresets(currentUserId),
     ]);
   }
 
@@ -750,6 +541,33 @@ export default function EstimatesNewPage() {
     return data.id;
   }
 
+  async function saveReusableLineItemTypes(currentUserId: string) {
+    const existingNames = new Set(
+      lineItemPresets.map((preset) => preset.name.trim().toLowerCase())
+    );
+
+    const presetsToInsert = lineItems
+      .filter((item) => item.saveAsPreset)
+      .map((item) => ({
+        user_id: currentUserId,
+        name: item.type.trim(),
+        default_rate: Number(item.rate || 0),
+        default_unit: item.unit || "flat amount",
+        updated_at: new Date().toISOString(),
+      }))
+      .filter((item) => item.name && !existingNames.has(item.name.toLowerCase()));
+
+    if (presetsToInsert.length === 0) return;
+
+    const { error } = await supabase
+      .from("line_item_presets")
+      .insert(presetsToInsert);
+
+    if (error) {
+      throw new Error(`Estimate saved, but reusable type failed: ${error.message}`);
+    }
+  }
+
   async function handleSaveEstimate(e: React.FormEvent) {
     e.preventDefault();
 
@@ -771,6 +589,7 @@ export default function EstimatesNewPage() {
       return;
     }
 
+    setSaving(true);
     setMessage(editingId ? "Updating estimate..." : "Saving estimate...");
 
     let customerId: string | null = null;
@@ -783,6 +602,7 @@ export default function EstimatesNewPage() {
           err instanceof Error ? err.message : "Unknown error"
         }`
       );
+      setSaving(false);
       return;
     }
 
@@ -803,88 +623,94 @@ export default function EstimatesNewPage() {
       markup_percent: Number(markupPercent),
     };
 
-    if (editingId) {
-      const { error: updateError } = await supabase
-        .from("estimates")
-        .update(estimatePayload)
-        .eq("id", editingId)
-        .eq("user_id", user.id);
+    try {
+      if (editingId) {
+        const { error: updateError } = await supabase
+          .from("estimates")
+          .update(estimatePayload)
+          .eq("id", editingId)
+          .eq("user_id", user.id);
 
-      if (updateError) {
-        setMessage(`Error updating estimate: ${updateError.message}`);
+        if (updateError) {
+          throw new Error(`Error updating estimate: ${updateError.message}`);
+        }
+
+        const { error: deleteOldItemsError } = await supabase
+          .from("line_items")
+          .delete()
+          .eq("estimate_id", editingId);
+
+        if (deleteOldItemsError) {
+          throw new Error(
+            `Estimate updated, but old line items could not be removed: ${deleteOldItemsError.message}`
+          );
+        }
+
+        const itemsToInsert = cleanedLineItems.map((item) => ({
+          estimate_id: editingId,
+          type: item.type,
+          quantity: item.quantity,
+          rate: item.rate,
+        }));
+
+        const { error: insertNewItemsError } = await supabase
+          .from("line_items")
+          .insert(itemsToInsert);
+
+        if (insertNewItemsError) {
+          throw new Error(
+            `Estimate updated, but new line items could not be saved: ${insertNewItemsError.message}`
+          );
+        }
+
+        await saveReusableLineItemTypes(user.id);
+
+        setMessage("Estimate updated successfully!");
+        resetForm();
+        await loadAppData(user.id);
+        setSaving(false);
         return;
       }
 
-      const { error: deleteOldItemsError } = await supabase
-        .from("line_items")
-        .delete()
-        .eq("estimate_id", editingId);
+      const { data: estimateData, error: estimateError } = await supabase
+        .from("estimates")
+        .insert([estimatePayload])
+        .select()
+        .single();
 
-      if (deleteOldItemsError) {
-        setMessage(
-          `Estimate updated, but old line items could not be removed: ${deleteOldItemsError.message}`
+      if (estimateError || !estimateData) {
+        throw new Error(
+          `Error saving estimate: ${estimateError?.message || "Unknown error"}`
         );
-        return;
       }
 
       const itemsToInsert = cleanedLineItems.map((item) => ({
-        estimate_id: editingId,
+        estimate_id: estimateData.id,
         type: item.type,
         quantity: item.quantity,
         rate: item.rate,
       }));
 
-      const { error: insertNewItemsError } = await supabase
+      const { error: itemsError } = await supabase
         .from("line_items")
         .insert(itemsToInsert);
 
-      if (insertNewItemsError) {
-        setMessage(
-          `Estimate updated, but new line items could not be saved: ${insertNewItemsError.message}`
+      if (itemsError) {
+        throw new Error(
+          `Estimate saved, but error saving line items: ${itemsError.message}`
         );
-        return;
       }
 
-      setMessage("Estimate updated successfully!");
+      await saveReusableLineItemTypes(user.id);
+
+      setMessage("Estimate saved successfully!");
       resetForm();
       await loadAppData(user.id);
-      return;
+      setSaving(false);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Something went wrong.");
+      setSaving(false);
     }
-
-    const { data: estimateData, error: estimateError } = await supabase
-      .from("estimates")
-      .insert([estimatePayload])
-      .select()
-      .single();
-
-    if (estimateError || !estimateData) {
-      setMessage(
-        `Error saving estimate: ${estimateError?.message || "Unknown error"}`
-      );
-      return;
-    }
-
-    const itemsToInsert = cleanedLineItems.map((item) => ({
-      estimate_id: estimateData.id,
-      type: item.type,
-      quantity: item.quantity,
-      rate: item.rate,
-    }));
-
-    const { error: itemsError } = await supabase
-      .from("line_items")
-      .insert(itemsToInsert);
-
-    if (itemsError) {
-      setMessage(
-        `Estimate saved, but error saving line items: ${itemsError.message}`
-      );
-      return;
-    }
-
-    setMessage("Estimate saved successfully!");
-    resetForm();
-    await loadAppData(user.id);
   }
 
   function handleEdit(estimate: Estimate) {
@@ -908,19 +734,12 @@ export default function EstimatesNewPage() {
       type: item.type,
       quantity: String(item.quantity),
       rate: String(item.rate),
+      unit: presetOptions[item.type]?.unit || "custom",
+      saveAsPreset: false,
     }));
 
     setLineItems(
-      mappedLineItems.length > 0
-        ? mappedLineItems
-        : [
-            {
-              id: 1,
-              type: "Framing",
-              quantity: "",
-              rate: laborRates.Framing.rate.toString(),
-            },
-          ]
+      mappedLineItems.length > 0 ? mappedLineItems : [makeDefaultLineItem()]
     );
 
     setMessage("Editing estimate...");
@@ -960,25 +779,6 @@ export default function EstimatesNewPage() {
 
     setMessage("Estimate deleted successfully!");
     await loadAppData(user.id);
-  }
-
-  function handleDownloadPdf(estimate: Estimate) {
-    const html = generateEstimateHtml(estimate);
-    const printWindow = window.open("", "_blank");
-
-    if (!printWindow) {
-      setMessage("Popup blocked. Please allow popups to generate the PDF.");
-      return;
-    }
-
-    printWindow.document.open();
-    printWindow.document.write(html);
-    printWindow.document.close();
-
-    printWindow.onload = () => {
-      printWindow.focus();
-      printWindow.print();
-    };
   }
 
   if (authLoading) {
@@ -1052,18 +852,14 @@ export default function EstimatesNewPage() {
 
       <div className="mx-auto max-w-5xl space-y-8">
         <div className="rounded-2xl bg-white p-8 shadow">
-          <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                {editingId ? "Edit Estimate" : "Create Estimate"}
-              </h1>
-              <p className="text-sm text-gray-600">
-                Signed in as {user.email || "User"}
-              </p>
-            </div>
-          </div>
+          <h1 className="text-3xl font-bold text-gray-900">
+            {editingId ? "Edit Estimate" : "Create Estimate"}
+          </h1>
+          <p className="mt-1 text-sm text-gray-600">
+            Signed in as {user.email || "User"}
+          </p>
 
-          <form onSubmit={handleSaveEstimate} className="space-y-6">
+          <form onSubmit={handleSaveEstimate} className="mt-6 space-y-6">
             <div className="space-y-3">
               <label className="block text-sm font-medium text-gray-900">
                 Customer
@@ -1183,9 +979,9 @@ export default function EstimatesNewPage() {
                 const lineTotal =
                   Number(item.quantity || 0) * Number(item.rate || 0);
 
-                const presetTypes = Object.keys(laborRates);
+                const presetNames = Object.keys(presetOptions);
                 const isCustomType =
-                  item.type !== "" && !presetTypes.includes(item.type);
+                  item.type !== "" && !presetNames.includes(item.type);
 
                 return (
                   <div
@@ -1215,41 +1011,61 @@ export default function EstimatesNewPage() {
                         </label>
 
                         <select
-                          value={isCustomType ? "Custom" : item.type}
-                          onChange={(e) => {
-                            const nextValue = e.target.value;
-
-                            if (nextValue === "Custom") {
-                              updateLineItem(item.id, "type", "");
-                              return;
-                            }
-
-                            updateLineItem(item.id, "type", nextValue);
-                          }}
+                          value={isCustomType || item.type === "" ? "__custom__" : item.type}
+                          onChange={(e) =>
+                            updateLineItem(item.id, "type", e.target.value)
+                          }
                           className="w-full rounded-lg border p-3 text-gray-900"
                         >
-                          {presetTypes.map((type) => (
+                          {presetNames.map((type) => (
                             <option key={type} value={type}>
                               {type}
                             </option>
                           ))}
-                          <option value="Custom">Custom</option>
+                          <option value="__custom__">Custom</option>
                         </select>
 
                         {(isCustomType || item.type === "") && (
-                          <input
-                            type="text"
-                            value={item.type}
-                            onChange={(e) =>
-                              updateLineItem(item.id, "type", e.target.value)
-                            }
-                            placeholder="Custom type, e.g. Cabinets"
-                            className="mt-2 w-full rounded-lg border p-3 text-gray-900"
-                          />
+                          <>
+                            <input
+                              type="text"
+                              value={item.type}
+                              onChange={(e) =>
+                                updateLineItem(item.id, "type", e.target.value)
+                              }
+                              placeholder="Custom type, e.g. Cabinets"
+                              className="mt-2 w-full rounded-lg border p-3 text-gray-900"
+                            />
+
+                            <input
+                              type="text"
+                              value={item.unit}
+                              onChange={(e) =>
+                                updateLineItem(item.id, "unit", e.target.value)
+                              }
+                              placeholder="Unit, e.g. flat amount"
+                              className="mt-2 w-full rounded-lg border p-3 text-gray-900"
+                            />
+
+                            <label className="mt-2 flex items-center gap-2 text-sm text-gray-700">
+                              <input
+                                type="checkbox"
+                                checked={item.saveAsPreset}
+                                onChange={(e) =>
+                                  updateLineItem(
+                                    item.id,
+                                    "saveAsPreset",
+                                    e.target.checked
+                                  )
+                                }
+                              />
+                              Save as reusable type
+                            </label>
+                          </>
                         )}
 
                         <p className="mt-1 text-sm text-gray-600">
-                          {getUnitForType(item.type)}
+                          {item.unit || "custom"}
                         </p>
                       </div>
 
@@ -1328,8 +1144,17 @@ export default function EstimatesNewPage() {
             </div>
 
             <div className="flex gap-3">
-              <button className="rounded bg-black px-4 py-2 text-white">
-                {editingId ? "Update Estimate" : "Save Estimate"}
+              <button
+                disabled={saving}
+                className="rounded bg-black px-4 py-2 text-white disabled:opacity-50"
+              >
+                {saving
+                  ? editingId
+                    ? "Updating..."
+                    : "Saving..."
+                  : editingId
+                    ? "Update Estimate"
+                    : "Save Estimate"}
               </button>
 
               {editingId && (
@@ -1389,12 +1214,6 @@ export default function EstimatesNewPage() {
                         {estimate.valid_until && (
                           <p className="text-sm text-gray-600">
                             Valid Until: {formatDate(estimate.valid_until)}
-                          </p>
-                        )}
-
-                        {estimate.customer_id && (
-                          <p className="text-sm text-gray-600">
-                            Linked to customer record
                           </p>
                         )}
                       </div>
@@ -1461,14 +1280,6 @@ export default function EstimatesNewPage() {
                         className="rounded bg-blue-600 px-3 py-1 text-white"
                       >
                         Edit
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleDownloadPdf(estimate)}
-                        className="rounded bg-green-600 px-3 py-1 text-white"
-                      >
-                        Download PDF
                       </button>
 
                       <button
