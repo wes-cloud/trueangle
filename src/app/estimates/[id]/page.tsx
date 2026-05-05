@@ -31,6 +31,13 @@ type Estimate = {
   markup_percent: number | null;
   created_at: string | null;
   status: string | null;
+  approval_required: boolean | null;
+  approval_token: string | null;
+  approved_at: string | null;
+  approved_by_name: string | null;
+  approved_by_email: string | null;
+  agreement_terms: string | null;
+  converted_invoice_id: string | null;
 };
 
 type Expense = {
@@ -45,6 +52,16 @@ type Expense = {
   estimate_id: string | null;
   notes?: string | null;
 };
+
+const defaultAgreementTerms = `This estimate outlines the agreed scope of work and pricing for the project listed above.
+
+Any work not included in this estimate may require a separate written change order.
+
+Changes to scope, materials, schedule, or site conditions may affect the final price and timeline.
+
+Payment terms, deposits, and final payment expectations should be agreed to before work begins.
+
+By approving this estimate, the client confirms they have reviewed the scope, pricing, and terms and authorize the contractor to move forward.`;
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -70,12 +87,12 @@ function formatStatus(status: string | null) {
       return "Draft";
     case "sent":
       return "Sent";
-    case "accepted":
-      return "Accepted";
-    case "completed":
-      return "Completed";
-    case "invoiced":
-      return "Invoiced";
+    case "approved":
+      return "Approved";
+    case "declined":
+      return "Declined";
+    case "converted":
+      return "Converted to Invoice";
     default:
       return status.charAt(0).toUpperCase() + status.slice(1);
   }
@@ -97,11 +114,25 @@ export default function EstimateDetailPage() {
 
   const [loading, setLoading] = useState(true);
   const [statusLoading, setStatusLoading] = useState(false);
+  const [savingApproval, setSavingApproval] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [estimate, setEstimate] = useState<Estimate | null>(null);
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [message, setMessage] = useState("");
+  const [origin, setOrigin] = useState("");
+
+  const [approvalRequired, setApprovalRequired] = useState(false);
+  const [agreementTerms, setAgreementTerms] = useState("");
+
+  const approvalLink =
+    origin && estimate?.approval_token
+      ? `${origin}/approve-estimate/${estimate.approval_token}`
+      : "";
+
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
 
   async function loadData() {
     if (!estimateId || typeof estimateId !== "string") {
@@ -143,7 +174,14 @@ export default function EstimateDetailPage() {
         amount,
         markup_percent,
         created_at,
-        status
+        status,
+        approval_required,
+        approval_token,
+        approved_at,
+        approved_by_name,
+        approved_by_email,
+        agreement_terms,
+        converted_invoice_id
       `
       )
       .eq("id", estimateId)
@@ -156,9 +194,13 @@ export default function EstimateDetailPage() {
       return;
     }
 
-    setEstimate(estimateData as Estimate);
+    const safeEstimate = estimateData as Estimate;
 
-    if (estimateData.customer_id) {
+    setEstimate(safeEstimate);
+    setApprovalRequired(Boolean(safeEstimate.approval_required));
+    setAgreementTerms(safeEstimate.agreement_terms || defaultAgreementTerms);
+
+    if (safeEstimate.customer_id) {
       const { data: customerData } = await supabase
         .from("customers")
         .select(
@@ -170,7 +212,7 @@ export default function EstimateDetailPage() {
           address
         `
         )
-        .eq("id", estimateData.customer_id)
+        .eq("id", safeEstimate.customer_id)
         .eq("user_id", user.id)
         .single();
 
@@ -212,6 +254,7 @@ export default function EstimateDetailPage() {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [estimateId]);
 
   async function updateStatus(newStatus: string) {
@@ -245,6 +288,86 @@ export default function EstimateDetailPage() {
     setMessage(`Status updated to ${formatStatus(newStatus)}.`);
     await loadData();
     setStatusLoading(false);
+  }
+
+  async function handleSaveApprovalSettings() {
+    if (!estimate) return;
+
+    setSavingApproval(true);
+    setMessage("");
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setMessage("You must be signed in.");
+      setSavingApproval(false);
+      return;
+    }
+
+    const { error } = await supabase
+      .from("estimates")
+      .update({
+        approval_required: approvalRequired,
+        agreement_terms: agreementTerms,
+      })
+      .eq("id", estimate.id)
+      .eq("user_id", user.id);
+
+    if (error) {
+      setMessage(`Error saving approval settings: ${error.message}`);
+      setSavingApproval(false);
+      return;
+    }
+
+    setMessage("Approval settings saved.");
+    await loadData();
+    setSavingApproval(false);
+  }
+
+  async function handleSendForApproval() {
+    if (!estimate) return;
+
+    setStatusLoading(true);
+    setMessage("");
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setMessage("You must be signed in.");
+      setStatusLoading(false);
+      return;
+    }
+
+    const { error } = await supabase
+      .from("estimates")
+      .update({
+        status: "sent",
+        approval_required: true,
+        agreement_terms: agreementTerms || defaultAgreementTerms,
+      })
+      .eq("id", estimate.id)
+      .eq("user_id", user.id);
+
+    if (error) {
+      setMessage(`Error sending for approval: ${error.message}`);
+      setStatusLoading(false);
+      return;
+    }
+
+    setMessage("Estimate marked as sent. Copy the approval link and send it to your client.");
+    await loadData();
+    setStatusLoading(false);
+  }
+
+  async function copyApprovalLink() {
+    if (!approvalLink) return;
+
+    await navigator.clipboard.writeText(approvalLink);
+    setMessage("Approval link copied.");
   }
 
   async function handleCreateInvoice() {
@@ -316,12 +439,15 @@ export default function EstimateDetailPage() {
 
     const { error: statusError } = await supabase
       .from("estimates")
-      .update({ status: "invoiced" })
+      .update({
+        status: "converted",
+        converted_invoice_id: newInvoice.id,
+      })
       .eq("id", estimate.id)
       .eq("user_id", user.id);
 
     if (statusError) {
-      setMessage(`Invoice created, but estimate status failed to update.`);
+      setMessage("Invoice created, but estimate status failed to update.");
       window.location.href = `/invoices?invoice_id=${newInvoice.id}`;
       return;
     }
@@ -458,33 +584,131 @@ export default function EstimateDetailPage() {
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
+              onClick={() => updateStatus("draft")}
+              disabled={statusLoading}
+              className="rounded border border-gray-300 bg-white px-4 py-2 text-gray-900 shadow-sm disabled:opacity-50"
+            >
+              Mark Draft
+            </button>
+
+            <button
+              type="button"
               onClick={() => updateStatus("sent")}
               disabled={statusLoading}
               className="rounded border border-gray-300 bg-white px-4 py-2 text-gray-900 shadow-sm disabled:opacity-50"
             >
-              Mark as Sent
+              Mark Sent
             </button>
 
             <button
               type="button"
-              onClick={() => updateStatus("accepted")}
+              onClick={() => updateStatus("approved")}
               disabled={statusLoading}
               className="rounded bg-green-600 px-4 py-2 text-white disabled:opacity-50"
             >
-              Mark as Accepted
+              Mark Approved
             </button>
 
             <button
               type="button"
-              onClick={() => updateStatus("completed")}
+              onClick={() => updateStatus("declined")}
               disabled={statusLoading}
-              className="rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
+              className="rounded bg-red-600 px-4 py-2 text-white disabled:opacity-50"
             >
-              Mark as Completed
+              Mark Declined
             </button>
           </div>
 
           {message && <p className="mt-4 text-sm text-gray-900">{message}</p>}
+        </section>
+
+        <section className="rounded-2xl bg-white p-6 shadow">
+          <div className="flex flex-col gap-4">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">
+                Client Approval
+              </h2>
+              <p className="mt-1 text-sm text-gray-700">
+                Add simple agreement terms, then send the approval link to your client.
+              </p>
+            </div>
+
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-900">
+              <input
+                type="checkbox"
+                checked={approvalRequired}
+                onChange={(event) => setApprovalRequired(event.target.checked)}
+                className="h-4 w-4"
+              />
+              Require client approval before work starts
+            </label>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-900">
+                Agreement Terms
+              </label>
+              <textarea
+                value={agreementTerms}
+                onChange={(event) => setAgreementTerms(event.target.value)}
+                className="min-h-[180px] w-full rounded-lg border p-3 text-gray-900"
+              />
+              <p className="mt-2 text-xs text-gray-600">
+                These terms are a general template. Contractors should have an attorney review important agreements.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={handleSaveApprovalSettings}
+                disabled={savingApproval}
+                className="rounded bg-black px-4 py-2 text-white disabled:opacity-50"
+              >
+                Save Approval Settings
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSendForApproval}
+                disabled={statusLoading}
+                className="rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
+              >
+                Send for Approval
+              </button>
+
+              {approvalLink && (
+                <button
+                  type="button"
+                  onClick={copyApprovalLink}
+                  className="rounded border border-gray-300 bg-white px-4 py-2 text-gray-900 shadow-sm"
+                >
+                  Copy Approval Link
+                </button>
+              )}
+            </div>
+
+            {approvalLink && (
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <p className="text-sm font-semibold text-gray-900">
+                  Approval Link
+                </p>
+                <p className="mt-1 break-all text-sm text-blue-700">
+                  {approvalLink}
+                </p>
+              </div>
+            )}
+
+            {estimate.approved_at && (
+              <div className="rounded-xl border border-green-200 bg-green-50 p-4">
+                <p className="text-sm font-semibold text-green-900">
+                  Approved by {estimate.approved_by_name || "client"}
+                </p>
+                <p className="text-sm text-green-800">
+                  {formatDate(estimate.approved_at)}
+                </p>
+              </div>
+            )}
+          </div>
         </section>
 
         <section className="grid gap-4 md:grid-cols-3">
