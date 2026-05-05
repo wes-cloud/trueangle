@@ -67,32 +67,73 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="bg-slate-50 px-6 py-16">
-        <div className="mx-auto max-w-6xl">
-          <h2 className="text-3xl font-black tracking-tight">
-            Why contractors switch from QuickBooks to TrueAngle
-          </h2>
+      <section className="px-6 py-16">
+  <div className="mx-auto max-w-4xl">
+    <h2 className="text-2xl font-bold text-center">
+      Why contractors switch to TrueAngle
+    </h2>
 
-          <div className="mt-8 grid gap-5 md:grid-cols-2">
-            <Card
-              title="QuickBooks was built for accountants."
-              body="TrueAngle is built for contractors who need to send the job, get it approved, track the money, and move on."
-            />
-            <Card
-              title="Stop chasing paperwork."
-              body="Send an estimate, let the client approve it, and automatically create the invoice."
-            />
-            <Card
-              title="Know if the job made money."
-              body="Track job expenses against estimates and invoices so profit is not a guessing game."
-            />
-            <Card
-              title="Bring your bookkeeper in for free."
-              body="Owners pay. Bookkeepers get access without adding another subscription cost."
-            />
-          </div>
-        </div>
-      </section>
+    <div className="mt-10 grid gap-6 md:grid-cols-2">
+      
+      <div className="rounded-2xl border p-6">
+        <p className="text-sm font-semibold text-slate-500">Before</p>
+        <p className="mt-2 font-medium text-slate-800">
+          Estimates in one place, receipts somewhere else, invoices in another app.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border p-6 bg-slate-50">
+        <p className="text-sm font-semibold text-slate-500">With TrueAngle</p>
+        <p className="mt-2 font-medium text-slate-900">
+          Estimates, expenses, invoices, and profit — all tied to the same job.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border p-6">
+        <p className="text-sm font-semibold text-slate-500">Before</p>
+        <p className="mt-2 font-medium text-slate-800">
+          You finish a job and hope you made money.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border p-6 bg-slate-50">
+        <p className="text-sm font-semibold text-slate-500">With TrueAngle</p>
+        <p className="mt-2 font-medium text-slate-900">
+          You know your profit before the job is even done.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border p-6">
+        <p className="text-sm font-semibold text-slate-500">Before</p>
+        <p className="mt-2 font-medium text-slate-800">
+          Mileage, materials, and labor costs slip through the cracks.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border p-6 bg-slate-50">
+        <p className="text-sm font-semibold text-slate-500">With TrueAngle</p>
+        <p className="mt-2 font-medium text-slate-900">
+          Every cost is tracked, tied to the job, and accounted for.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border p-6">
+        <p className="text-sm font-semibold text-slate-500">Before</p>
+        <p className="mt-2 font-medium text-slate-800">
+          You spend time chasing numbers instead of running jobs.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border p-6 bg-slate-50">
+        <p className="text-sm font-semibold text-slate-500">With TrueAngle</p>
+        <p className="mt-2 font-medium text-slate-900">
+          Your numbers are already there when you need them.
+        </p>
+      </div>
+
+    </div>
+  </div>
+</section>
 
       <section className="mx-auto max-w-6xl px-6 py-16">
         <h2 className="text-3xl font-black tracking-tight">
@@ -130,16 +171,6 @@ export default function HomePage() {
   );
 }
 
-function Card({ title, body }: { title: string; body: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <h3 className="text-xl font-black text-slate-950">{title}</h3>
-      <p className="mt-3 text-base font-medium leading-7 text-slate-600">
-        {body}
-      </p>
-    </div>
-  );
-}
 
 function Step({ number, title }: { number: string; title: string }) {
   return (
