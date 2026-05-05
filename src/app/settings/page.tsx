@@ -730,6 +730,34 @@ async function getOrCreateCompany(currentUser: AuthUser) {
             </div>
           </form>
         </section>
+        <section className="rounded-2xl bg-white p-8 shadow">
+  <h2 className="text-xl font-bold text-slate-950">Support</h2>
+
+  <p className="mt-2 text-sm text-slate-700">
+    Need help or ran into an issue? Reach out and we’ll get back to you.
+  </p>
+
+  <p className="mt-2 text-xs font-medium text-slate-500">
+    Typical response time: 24–48 hours.
+  </p>
+
+  <div className="mt-6">
+    <button
+      type="button"
+      onClick={() => {
+        window.location.href =
+          "mailto:support@trueangle.app?subject=TrueAngle Support Request&body=What were you trying to do?%0A%0AWhat went wrong?%0A%0AScreenshot (if possible):";
+      }}
+      className="rounded-lg bg-slate-950 px-5 py-3 font-semibold text-white hover:bg-slate-800"
+    >
+      Contact Support
+    </button>
+  </div>
+
+  <p className="mt-4 text-xs text-slate-500">
+    Please include what you were trying to do, what went wrong, and a screenshot if possible.
+  </p>
+</section>
       </div>
     </main>
   );
