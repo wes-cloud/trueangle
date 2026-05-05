@@ -5,14 +5,24 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import AppNav from "@/components/AppNav";
 
-const laborRates = {
+const laborRates: Record<string, { rate: number; unit: string }> = {
   Demo: { rate: 80, unit: "per hour" },
   Framing: { rate: 30, unit: "per linear foot" },
-  "Finish Carpentry": { rate: 95, unit: "per hour" },
   Electrical: { rate: 110, unit: "per hour" },
   Plumbing: { rate: 105, unit: "per hour" },
+  Drywall: { rate: 2.5, unit: "per sq ft" },
+  Tile: { rate: 8, unit: "per sq ft" },
+  Flooring: { rate: 4.25, unit: "per sq ft" },
   Painting: { rate: 3.25, unit: "per sq ft" },
+  Roofing: { rate: 5, unit: "per sq ft" },
+  Concrete: { rate: 6, unit: "per sq ft" },
+  Excavation: { rate: 100, unit: "per hour" },
+  Permits: { rate: 0, unit: "flat amount" },
+  "Dump fees": { rate: 0, unit: "flat amount" },
+  Subcontractor: { rate: 0, unit: "flat amount" },
+  Labor: { rate: 65, unit: "per hour" },
   Materials: { rate: 0, unit: "flat amount" },
+  Other: { rate: 0, unit: "flat amount" },
 };
 
 const companyInfo = {
@@ -21,8 +31,6 @@ const companyInfo = {
   email: "wes@weswhitecontracting.com",
   address: "Mount Vernon, WA",
 };
-
-type LaborType = keyof typeof laborRates;
 
 type AuthUser = {
   id: string;
@@ -84,7 +92,7 @@ type Estimate = {
 
 type DraftLineItem = {
   id: number;
-  type: LaborType;
+  type: string;
   quantity: string;
   rate: string;
 };
@@ -132,6 +140,10 @@ function getEstimateExpenseTotal(expenses: Expense[], estimateId: string) {
   return expenses
     .filter((expense) => expense.estimate_id === estimateId)
     .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+}
+
+function getUnitForType(type: string) {
+  return laborRates[type]?.unit || "custom";
 }
 
 function generateEstimateHtml(estimate: Estimate) {
@@ -466,14 +478,15 @@ export default function EstimatesNewPage() {
         if (item.id !== id) return item;
 
         if (field === "type") {
-          const selectedType = value as LaborType;
+          const selectedRate = laborRates[value];
+
           return {
             ...item,
-            type: selectedType,
+            type: value,
             rate:
-              selectedType === "Materials"
-                ? item.rate
-                : laborRates[selectedType].rate.toString(),
+              selectedRate && value !== "Materials" && value !== "Other"
+                ? selectedRate.rate.toString()
+                : item.rate,
           };
         }
 
@@ -745,6 +758,19 @@ export default function EstimatesNewPage() {
       return;
     }
 
+    const cleanedLineItems = lineItems
+      .map((item) => ({
+        type: item.type.trim(),
+        quantity: Number(item.quantity || 0),
+        rate: Number(item.rate || 0),
+      }))
+      .filter((item) => item.type && item.quantity > 0);
+
+    if (cleanedLineItems.length === 0) {
+      setMessage("Add at least one line item with a type and quantity.");
+      return;
+    }
+
     setMessage(editingId ? "Updating estimate..." : "Saving estimate...");
 
     let customerId: string | null = null;
@@ -801,11 +827,11 @@ export default function EstimatesNewPage() {
         return;
       }
 
-      const itemsToInsert = lineItems.map((item) => ({
+      const itemsToInsert = cleanedLineItems.map((item) => ({
         estimate_id: editingId,
         type: item.type,
-        quantity: Number(item.quantity),
-        rate: Number(item.rate),
+        quantity: item.quantity,
+        rate: item.rate,
       }));
 
       const { error: insertNewItemsError } = await supabase
@@ -838,11 +864,11 @@ export default function EstimatesNewPage() {
       return;
     }
 
-    const itemsToInsert = lineItems.map((item) => ({
+    const itemsToInsert = cleanedLineItems.map((item) => ({
       estimate_id: estimateData.id,
       type: item.type,
-      quantity: Number(item.quantity),
-      rate: Number(item.rate),
+      quantity: item.quantity,
+      rate: item.rate,
     }));
 
     const { error: itemsError } = await supabase
@@ -879,7 +905,7 @@ export default function EstimatesNewPage() {
 
     const mappedLineItems: DraftLineItem[] = estimate.line_items.map((item) => ({
       id: Date.now() + Math.floor(Math.random() * 10000),
-      type: item.type as LaborType,
+      type: item.type,
       quantity: String(item.quantity),
       rate: String(item.rate),
     }));
@@ -970,7 +996,7 @@ export default function EstimatesNewPage() {
       <main className="min-h-screen bg-gray-100 p-8">
         <div className="mx-auto max-w-md rounded-2xl bg-white p-8 shadow">
           <h1 className="mb-2 text-3xl font-bold text-gray-900">
-            WW Contracting Login
+            TrueAngle Login
           </h1>
           <p className="mb-6 text-sm text-gray-600">
             Sign in or create an account to manage estimates.
@@ -1157,6 +1183,10 @@ export default function EstimatesNewPage() {
                 const lineTotal =
                   Number(item.quantity || 0) * Number(item.rate || 0);
 
+                const presetTypes = Object.keys(laborRates);
+                const isCustomType =
+                  item.type !== "" && !presetTypes.includes(item.type);
+
                 return (
                   <div
                     key={item.id}
@@ -1183,21 +1213,43 @@ export default function EstimatesNewPage() {
                         <label className="mb-1 block text-sm font-medium text-gray-900">
                           Type
                         </label>
+
                         <select
-                          value={item.type}
-                          onChange={(e) =>
-                            updateLineItem(item.id, "type", e.target.value)
-                          }
+                          value={isCustomType ? "Custom" : item.type}
+                          onChange={(e) => {
+                            const nextValue = e.target.value;
+
+                            if (nextValue === "Custom") {
+                              updateLineItem(item.id, "type", "");
+                              return;
+                            }
+
+                            updateLineItem(item.id, "type", nextValue);
+                          }}
                           className="w-full rounded-lg border p-3 text-gray-900"
                         >
-                          {Object.keys(laborRates).map((type) => (
+                          {presetTypes.map((type) => (
                             <option key={type} value={type}>
                               {type}
                             </option>
                           ))}
+                          <option value="Custom">Custom</option>
                         </select>
+
+                        {(isCustomType || item.type === "") && (
+                          <input
+                            type="text"
+                            value={item.type}
+                            onChange={(e) =>
+                              updateLineItem(item.id, "type", e.target.value)
+                            }
+                            placeholder="Custom type, e.g. Cabinets"
+                            className="mt-2 w-full rounded-lg border p-3 text-gray-900"
+                          />
+                        )}
+
                         <p className="mt-1 text-sm text-gray-600">
-                          {laborRates[item.type].unit}
+                          {getUnitForType(item.type)}
                         </p>
                       </div>
 
