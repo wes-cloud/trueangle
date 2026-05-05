@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import AppNav from "@/components/AppNav";
 import { supabase } from "@/lib/supabase";
 
@@ -176,9 +177,11 @@ function getQuarter(date: Date) {
 }
 
 export default function ExpensesPage() {
+  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [authLoading, setAuthLoading] = useState(true);
+  const [pageLoading, setPageLoading] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [companyRole, setCompanyRole] = useState<CompanyRole>(null);
   const [companyUserIds, setCompanyUserIds] = useState<string[]>([]);
@@ -197,6 +200,7 @@ export default function ExpensesPage() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
   const [savingReviewId, setSavingReviewId] = useState<string | null>(null);
 
   const [csvRows, setCsvRows] = useState<CsvExpenseRow[]>([]);
@@ -212,12 +216,27 @@ export default function ExpensesPage() {
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [newCategory, setNewCategory] = useState("");
 
+  function clearPageState() {
+    setCompanyRole(null);
+    setCompanyUserIds([]);
+    setCustomers([]);
+    setEstimates([]);
+    setExpenses([]);
+    setCsvRows([]);
+    setCsvFileName("");
+    setImportSummary(null);
+  }
+
   async function getCompanyAccess(currentUserId: string) {
-    const { data: memberships } = await supabase
+    const { data: memberships, error: membershipError } = await supabase
       .from("company_members")
       .select("company_id, role")
       .eq("user_id", currentUserId)
       .limit(1);
+
+    if (membershipError) {
+      throw new Error(`Error loading company access: ${membershipError.message}`);
+    }
 
     const membership = memberships?.[0];
 
@@ -228,83 +247,79 @@ export default function ExpensesPage() {
       };
     }
 
-    const { data: members } = await supabase
+    const { data: members, error: membersError } = await supabase
       .from("company_members")
       .select("user_id")
       .eq("company_id", membership.company_id);
 
+    if (membersError) {
+      throw new Error(`Error loading company members: ${membersError.message}`);
+    }
+
     const userIds =
-      members?.map((member) => member.user_id).filter(Boolean) || [
-        currentUserId,
-      ];
+      members?.map((member) => member.user_id).filter(Boolean) || [];
 
     return {
       role: (membership.role || "owner") as CompanyRole,
-      userIds,
+      userIds: userIds.length > 0 ? userIds : [currentUserId],
     };
   }
 
-  async function fetchCustomers(userIds: string[]) {
-    const { data, error } = await supabase
-      .from("customers")
-      .select("id, full_name")
-      .in("user_id", userIds)
-      .order("full_name", { ascending: true });
-
-    if (error) {
-      setMessage(`Error loading customers: ${error.message}`);
-      return;
-    }
-
-    setCustomers((data || []) as Customer[]);
-  }
-
-  async function fetchEstimates(userIds: string[]) {
-    const { data, error } = await supabase
-      .from("estimates")
-      .select("id, customer_id, customer_name, job_name, estimate_number")
-      .in("user_id", userIds)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      setMessage(`Error loading projects: ${error.message}`);
-      return;
-    }
-
-    setEstimates((data || []) as Estimate[]);
-  }
-
-  async function fetchExpenses(userIds: string[]) {
-    const { data, error } = await supabase
-      .from("expenses")
-      .select(
-        "id, user_id, customer_id, estimate_id, vendor, category, amount, expense_date, notes, created_at"
-      )
-      .in("user_id", userIds)
-      .order("expense_date", { ascending: false })
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      setMessage(`Error loading expenses: ${error.message}`);
-      return;
-    }
-
-    setExpenses((data || []) as Expense[]);
-  }
-
   async function loadPageData(currentUserId: string) {
+    setPageLoading(true);
     setMessage("");
 
-    const access = await getCompanyAccess(currentUserId);
+    try {
+      const access = await getCompanyAccess(currentUserId);
 
-    setCompanyRole(access.role);
-    setCompanyUserIds(access.userIds);
+      setCompanyRole(access.role);
+      setCompanyUserIds(access.userIds);
 
-    await Promise.all([
-      fetchCustomers(access.userIds),
-      fetchEstimates(access.userIds),
-      fetchExpenses(access.userIds),
-    ]);
+      const [customersResult, estimatesResult, expensesResult] =
+        await Promise.all([
+          supabase
+            .from("customers")
+            .select("id, full_name")
+            .in("user_id", access.userIds)
+            .order("full_name", { ascending: true }),
+
+          supabase
+            .from("estimates")
+            .select("id, customer_id, customer_name, job_name, estimate_number")
+            .in("user_id", access.userIds)
+            .order("created_at", { ascending: false }),
+
+          supabase
+            .from("expenses")
+            .select(
+              "id, user_id, customer_id, estimate_id, vendor, category, amount, expense_date, notes, created_at"
+            )
+            .in("user_id", access.userIds)
+            .order("expense_date", { ascending: false })
+            .order("created_at", { ascending: false }),
+        ]);
+
+      if (customersResult.error) {
+        throw new Error(`Error loading customers: ${customersResult.error.message}`);
+      }
+
+      if (estimatesResult.error) {
+        throw new Error(`Error loading projects: ${estimatesResult.error.message}`);
+      }
+
+      if (expensesResult.error) {
+        throw new Error(`Error loading expenses: ${expensesResult.error.message}`);
+      }
+
+      setCustomers((customersResult.data || []) as Customer[]);
+      setEstimates((estimatesResult.data || []) as Estimate[]);
+      setExpenses((expensesResult.data || []) as Expense[]);
+    } catch (err) {
+      const error = err as Error;
+      setMessage(error.message || "Unable to load expenses.");
+    } finally {
+      setPageLoading(false);
+    }
   }
 
   function handleAddCategory() {
@@ -375,19 +390,25 @@ export default function ExpensesPage() {
       return;
     }
 
-    const { error } = await supabase.from("expenses").delete().eq("id", id);
+    setMessage("");
 
-    if (error) {
+    try {
+      const { error } = await supabase.from("expenses").delete().eq("id", id);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      if (editingId === id) {
+        resetForm();
+      }
+
+      setMessage("Expense deleted.");
+      await loadPageData(user.id);
+    } catch (err) {
+      const error = err as Error;
       setMessage(`Error deleting expense: ${error.message}`);
-      return;
     }
-
-    if (editingId === id) {
-      resetForm();
-    }
-
-    setMessage("Expense deleted successfully.");
-    await loadPageData(user.id);
   }
 
   async function handleReviewCategoryChange(expenseId: string, newCategory: string) {
@@ -396,19 +417,23 @@ export default function ExpensesPage() {
     setSavingReviewId(expenseId);
     setMessage("");
 
-    const { error } = await supabase
-      .from("expenses")
-      .update({ category: newCategory || null })
-      .eq("id", expenseId);
+    try {
+      const { error } = await supabase
+        .from("expenses")
+        .update({ category: newCategory || null })
+        .eq("id", expenseId);
 
-    if (error) {
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      await loadPageData(user.id);
+    } catch (err) {
+      const error = err as Error;
       setMessage(`Error updating category: ${error.message}`);
+    } finally {
       setSavingReviewId(null);
-      return;
     }
-
-    await loadPageData(user.id);
-    setSavingReviewId(null);
   }
 
   async function handleSaveExpense(e: React.FormEvent<HTMLFormElement>) {
@@ -429,49 +454,57 @@ export default function ExpensesPage() {
       return;
     }
 
-    const payload = {
-      user_id: user.id,
-      customer_id: selectedCustomerId || null,
-      estimate_id: selectedEstimateId || null,
-      vendor: vendor.trim(),
-      category: category.trim() || null,
-      amount: Number(amount),
-      expense_date: expenseDate || null,
-      notes: notes.trim() || null,
-    };
+    setSaving(true);
+    setMessage("");
 
-    if (editingId) {
-      const { error } = await supabase
-        .from("expenses")
-        .update(payload)
-        .eq("id", editingId);
+    try {
+      const payload = {
+        user_id: user.id,
+        customer_id: selectedCustomerId || null,
+        estimate_id: selectedEstimateId || null,
+        vendor: vendor.trim(),
+        category: category.trim() || null,
+        amount: Number(amount),
+        expense_date: expenseDate || null,
+        notes: notes.trim() || null,
+      };
 
-      if (error) {
-        setMessage(`Error updating expense: ${error.message}`);
+      if (editingId) {
+        const { error } = await supabase
+          .from("expenses")
+          .update(payload)
+          .eq("id", editingId);
+
+        if (error) {
+          throw new Error(error.message);
+        }
+
+        setMessage("Expense updated.");
+        resetForm();
+        await loadPageData(user.id);
         return;
       }
 
-      setMessage("Expense updated successfully.");
+      const { error } = await supabase.from("expenses").insert([
+        {
+          ...payload,
+          created_at: new Date().toISOString(),
+        },
+      ]);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      setMessage("Expense saved.");
       resetForm();
       await loadPageData(user.id);
-      return;
-    }
-
-    const { error } = await supabase.from("expenses").insert([
-      {
-        ...payload,
-        created_at: new Date().toISOString(),
-      },
-    ]);
-
-    if (error) {
+    } catch (err) {
+      const error = err as Error;
       setMessage(`Error saving expense: ${error.message}`);
-      return;
+    } finally {
+      setSaving(false);
     }
-
-    setMessage("Expense saved successfully.");
-    resetForm();
-    await loadPageData(user.id);
   }
 
   async function handleCsvFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -494,10 +527,9 @@ export default function ExpensesPage() {
       setCsvFileName(file.name);
       setImportSummary(null);
       setMessage(`Loaded ${parsedRows.length} rows from CSV.`);
-    } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "Unable to read CSV file."
-      );
+    } catch (err) {
+      const error = err as Error;
+      setMessage(error.message || "Unable to read CSV file.");
     }
   }
 
@@ -535,9 +567,11 @@ export default function ExpensesPage() {
     }
 
     setIsImporting(true);
+    setMessage("");
 
     try {
       const issues: ImportIssue[] = [];
+      const newCategories = new Set<string>();
       let unmatchedCount = 0;
 
       const inserts = csvRows
@@ -592,19 +626,20 @@ export default function ExpensesPage() {
                 customerUnmatched && projectUnmatched
                   ? "Customer and project not matched"
                   : customerUnmatched
-                  ? "Customer not matched"
-                  : "Project not matched",
+                    ? "Customer not matched"
+                    : "Project not matched",
             });
           }
 
           const categoryValue = row.category.trim();
+
           if (
             categoryValue &&
             !categories.some(
               (item) => item.toLowerCase() === categoryValue.toLowerCase()
             )
           ) {
-            setCategories((prev) => [...prev, categoryValue]);
+            newCategories.add(categoryValue);
           }
 
           return {
@@ -622,6 +657,24 @@ export default function ExpensesPage() {
         })
         .filter(Boolean);
 
+      if (newCategories.size > 0) {
+        setCategories((prev) => {
+          const merged = [...prev];
+
+          newCategories.forEach((newItem) => {
+            const exists = merged.some(
+              (existing) => existing.toLowerCase() === newItem.toLowerCase()
+            );
+
+            if (!exists) {
+              merged.push(newItem);
+            }
+          });
+
+          return merged;
+        });
+      }
+
       if (inserts.length === 0) {
         setImportSummary({
           importedCount: 0,
@@ -636,8 +689,7 @@ export default function ExpensesPage() {
       const { error } = await supabase.from("expenses").insert(inserts);
 
       if (error) {
-        setMessage(`Error importing CSV: ${error.message}`);
-        return;
+        throw new Error(error.message);
       }
 
       const summary: ImportSummary = {
@@ -651,27 +703,35 @@ export default function ExpensesPage() {
       };
 
       setImportSummary(summary);
-      setMessage(`Imported ${inserts.length} expenses successfully.`);
+      setMessage(`Imported ${inserts.length} expenses.`);
       resetImportState();
       await loadPageData(user.id);
+    } catch (err) {
+      const error = err as Error;
+      setMessage(`Error importing CSV: ${error.message}`);
     } finally {
       setIsImporting(false);
     }
   }
 
   async function handleSignOut() {
-    const { error } = await supabase.auth.signOut();
+    setMessage("");
 
-    if (error) {
+    try {
+      const { error } = await supabase.auth.signOut();
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      setUser(null);
+      clearPageState();
+      router.push("/");
+      router.refresh();
+    } catch (err) {
+      const error = err as Error;
       setMessage(`Sign out error: ${error.message}`);
-      return;
     }
-
-    setUser(null);
-    setCustomers([]);
-    setEstimates([]);
-    setExpenses([]);
-    setMessage("Signed out.");
   }
 
   const totalExpenses = useMemo(() => {
@@ -725,32 +785,50 @@ export default function ExpensesPage() {
   }, [expenses, expenseFilter]);
 
   useEffect(() => {
+    let isMounted = true;
+
     async function loadUser() {
-      const {
-        data: { user: authUser },
-        error,
-      } = await supabase.auth.getUser();
+      setAuthLoading(true);
+      setMessage("");
 
-      if (error) {
-        setMessage(error.message);
-        setAuthLoading(false);
-        return;
+      try {
+        const {
+          data: { user: authUser },
+          error,
+        } = await supabase.auth.getUser();
+
+        if (error) {
+          throw new Error(error.message);
+        }
+
+        const safeUser = authUser
+          ? {
+              id: authUser.id,
+              email: authUser.email ?? null,
+            }
+          : null;
+
+        if (!isMounted) return;
+
+        setUser(safeUser);
+
+        if (safeUser) {
+          await loadPageData(safeUser.id);
+        } else {
+          clearPageState();
+        }
+      } catch (err) {
+        const error = err as Error;
+
+        if (isMounted) {
+          setMessage(error.message || "Unable to load expenses.");
+          clearPageState();
+        }
+      } finally {
+        if (isMounted) {
+          setAuthLoading(false);
+        }
       }
-
-      const safeUser = authUser
-        ? {
-            id: authUser.id,
-            email: authUser.email ?? null,
-          }
-        : null;
-
-      setUser(safeUser);
-
-      if (safeUser) {
-        await loadPageData(safeUser.id);
-      }
-
-      setAuthLoading(false);
     }
 
     loadUser();
@@ -770,15 +848,14 @@ export default function ExpensesPage() {
       if (nextUser) {
         await loadPageData(nextUser.id);
       } else {
-        setCustomers([]);
-        setEstimates([]);
-        setExpenses([]);
+        clearPageState();
       }
 
       setAuthLoading(false);
     });
 
     return () => {
+      isMounted = false;
       subscription.unsubscribe();
     };
   }, []);
@@ -787,7 +864,7 @@ export default function ExpensesPage() {
     return (
       <main className="min-h-screen bg-slate-100 p-8">
         <div className="mx-auto max-w-md rounded-2xl bg-white p-8 shadow">
-          <p className="text-slate-900">Loading...</p>
+          <p className="text-slate-900">Loading expenses...</p>
         </div>
       </main>
     );
@@ -799,8 +876,17 @@ export default function ExpensesPage() {
         <div className="mx-auto max-w-md rounded-2xl bg-white p-8 shadow">
           <h1 className="text-3xl font-bold text-slate-950">Expenses</h1>
           <p className="mt-3 text-slate-700">
-            You need to sign in from the dashboard first.
+            You need to sign in first.
           </p>
+          <a
+            href="/auth"
+            className="mt-5 inline-block rounded-xl bg-slate-950 px-4 py-2 font-semibold text-white"
+          >
+            Sign in
+          </a>
+          {message && (
+            <p className="mt-4 text-sm font-semibold text-red-700">{message}</p>
+          )}
         </div>
       </main>
     );
@@ -826,6 +912,11 @@ export default function ExpensesPage() {
                   ? ` · ${companyRole} access`
                   : ""}
               </p>
+              {companyUserIds.length > 1 && (
+                <p className="mt-1 text-xs font-semibold text-slate-500">
+                  Showing company data across {companyUserIds.length} users.
+                </p>
+              )}
             </div>
 
             <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
@@ -837,6 +928,176 @@ export default function ExpensesPage() {
               </p>
             </div>
           </div>
+
+          {pageLoading && (
+            <p className="mt-4 text-sm font-semibold text-slate-600">
+              Refreshing expenses...
+            </p>
+          )}
+        </section>
+
+        {message && (
+          <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+            <p className="text-sm font-semibold text-slate-900">{message}</p>
+          </section>
+        )}
+
+        <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-2xl font-black text-slate-950">
+              {editingId ? "Edit Expense" : "Add Expense"}
+            </h2>
+
+            {editingId && (
+              <button
+                type="button"
+                onClick={resetForm}
+                className="rounded-xl border border-slate-300 px-4 py-2 font-bold text-slate-950"
+              >
+                Switch to New Expense
+              </button>
+            )}
+          </div>
+
+          <form onSubmit={handleSaveExpense} className="space-y-6">
+            <div className="grid gap-4 md:grid-cols-4">
+              <FormField label="Vendor">
+                <input
+                  type="text"
+                  value={vendor}
+                  onChange={(e) => setVendor(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
+                  placeholder="Home Depot"
+                  required
+                />
+              </FormField>
+
+              <FormField label="Category">
+                <div className="space-y-2">
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
+                  >
+                    <option value="">Select category</option>
+                    {categories.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+
+                  {!showAddCategory ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowAddCategory(true)}
+                      className="text-sm font-bold text-blue-700 hover:underline"
+                    >
+                      + Add Category
+                    </button>
+                  ) : (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newCategory}
+                        onChange={(e) => setNewCategory(e.target.value)}
+                        placeholder="New category"
+                        className="flex-1 rounded-lg border border-slate-300 p-2 text-sm text-slate-950"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddCategory}
+                        className="rounded-lg bg-slate-950 px-3 py-2 text-sm font-bold text-white"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </FormField>
+
+              <FormField label="Amount">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
+                  placeholder="0.00"
+                  required
+                />
+              </FormField>
+
+              <FormField label="Expense Date">
+                <input
+                  type="date"
+                  value={expenseDate}
+                  onChange={(e) => setExpenseDate(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
+                />
+              </FormField>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <FormField label="Customer">
+                <select
+                  value={selectedCustomerId}
+                  onChange={(e) => setSelectedCustomerId(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
+                >
+                  <option value="">No customer</option>
+                  {customers.map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.full_name}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+
+              <FormField label="Project / Estimate">
+                <select
+                  value={selectedEstimateId}
+                  onChange={(e) => handleEstimateChange(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
+                >
+                  <option value="">No project</option>
+                  {estimates.map((estimate) => (
+                    <option key={estimate.id} value={estimate.id}>
+                      {estimate.job_name || "Untitled Job"}
+                      {estimate.customer_name
+                        ? ` - ${estimate.customer_name}`
+                        : ""}
+                      {estimate.estimate_number
+                        ? ` (${estimate.estimate_number})`
+                        : ""}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+            </div>
+
+            <FormField label="Notes">
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="min-h-[100px] w-full rounded-xl border border-slate-300 p-3 text-slate-950"
+                placeholder="Optional notes"
+              />
+            </FormField>
+
+            <button
+              disabled={saving}
+              className="rounded-xl bg-slate-950 px-5 py-3 font-bold text-white hover:bg-slate-800 disabled:opacity-50"
+            >
+              {saving
+                ? editingId
+                  ? "Updating..."
+                  : "Saving..."
+                : editingId
+                  ? "Update Expense"
+                  : "Save Expense"}
+            </button>
+          </form>
         </section>
 
         {needsReviewExpenses.length > 0 ? (
@@ -847,7 +1108,7 @@ export default function ExpensesPage() {
                   Needs Review ({needsReviewExpenses.length})
                 </h2>
                 <p className="mt-1 text-sm font-semibold text-yellow-900">
-                  Categorize these so your books aren’t a mess.
+                  Categorize these so your books stay clean.
                 </p>
               </div>
 
@@ -907,7 +1168,7 @@ export default function ExpensesPage() {
               You’re all caught up. No expenses need review.
             </p>
             <p className="mt-1 text-sm font-semibold text-green-900">
-              Nice work. The books are cleaner than a freshly swept jobsite.
+              Nice work. Your books are clean.
             </p>
           </section>
         )}
@@ -944,7 +1205,7 @@ export default function ExpensesPage() {
               htmlFor="csv-upload"
               className="inline-block cursor-pointer rounded-xl bg-slate-950 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800"
             >
-              Import CSV
+              Choose CSV
             </label>
 
             <p className="text-sm font-medium text-slate-500">
@@ -1014,26 +1275,9 @@ export default function ExpensesPage() {
             </h2>
 
             <div className="mt-6 grid gap-4 md:grid-cols-3">
-              <div className="rounded-2xl bg-green-50 p-5 ring-1 ring-green-200">
-                <p className="text-sm font-bold text-green-700">Imported</p>
-                <p className="mt-2 text-2xl font-black text-green-950">
-                  {importSummary.importedCount}
-                </p>
-              </div>
-
-              <div className="rounded-2xl bg-yellow-50 p-5 ring-1 ring-yellow-200">
-                <p className="text-sm font-bold text-yellow-700">Skipped</p>
-                <p className="mt-2 text-2xl font-black text-yellow-950">
-                  {importSummary.skippedCount}
-                </p>
-              </div>
-
-              <div className="rounded-2xl bg-blue-50 p-5 ring-1 ring-blue-200">
-                <p className="text-sm font-bold text-blue-700">Unmatched</p>
-                <p className="mt-2 text-2xl font-black text-blue-950">
-                  {importSummary.unmatchedCount}
-                </p>
-              </div>
+              <SummaryCard label="Imported" value={importSummary.importedCount} />
+              <SummaryCard label="Skipped" value={importSummary.skippedCount} />
+              <SummaryCard label="Unmatched" value={importSummary.unmatchedCount} />
             </div>
 
             {importSummary.issues.length > 0 && (
@@ -1063,184 +1307,6 @@ export default function ExpensesPage() {
             )}
           </section>
         )}
-
-        <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-2xl font-black text-slate-950">
-              {editingId ? "Edit Expense" : "Add Expense"}
-            </h2>
-
-            {editingId && (
-              <button
-                type="button"
-                onClick={resetForm}
-                className="rounded-xl border border-slate-300 px-4 py-2 font-bold text-slate-950"
-              >
-                Switch to New Expense
-              </button>
-            )}
-          </div>
-
-          <form onSubmit={handleSaveExpense} className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-4">
-              <div>
-                <label className="mb-1 block text-sm font-bold text-slate-950">
-                  Vendor
-                </label>
-                <input
-                  type="text"
-                  value={vendor}
-                  onChange={(e) => setVendor(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
-                  placeholder="Home Depot"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-bold text-slate-950">
-                  Category
-                </label>
-                <div className="space-y-2">
-                  <select
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
-                  >
-                    <option value="">Select category</option>
-                    {categories.map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
-
-                  {!showAddCategory ? (
-                    <button
-                      type="button"
-                      onClick={() => setShowAddCategory(true)}
-                      className="text-sm font-bold text-blue-700 hover:underline"
-                    >
-                      + Add Category
-                    </button>
-                  ) : (
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={newCategory}
-                        onChange={(e) => setNewCategory(e.target.value)}
-                        placeholder="New category"
-                        className="flex-1 rounded-lg border border-slate-300 p-2 text-sm text-slate-950"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleAddCategory}
-                        className="rounded-lg bg-slate-950 px-3 py-2 text-sm font-bold text-white"
-                      >
-                        Add
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-bold text-slate-950">
-                  Amount
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
-                  placeholder="0.00"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-bold text-slate-950">
-                  Expense Date
-                </label>
-                <input
-                  type="date"
-                  value={expenseDate}
-                  onChange={(e) => setExpenseDate(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-sm font-bold text-slate-950">
-                  Customer
-                </label>
-                <select
-                  value={selectedCustomerId}
-                  onChange={(e) => setSelectedCustomerId(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
-                >
-                  <option value="">No customer</option>
-                  {customers.map((customer) => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.full_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-bold text-slate-950">
-                  Project / Estimate
-                </label>
-                <select
-                  value={selectedEstimateId}
-                  onChange={(e) => handleEstimateChange(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
-                >
-                  <option value="">No project</option>
-                  {estimates.map((estimate) => (
-                    <option key={estimate.id} value={estimate.id}>
-                      {estimate.job_name || "Untitled Job"}
-                      {estimate.customer_name
-                        ? ` - ${estimate.customer_name}`
-                        : ""}
-                      {estimate.estimate_number
-                        ? ` (${estimate.estimate_number})`
-                        : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-bold text-slate-950">
-                Notes
-              </label>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="min-h-[100px] w-full rounded-xl border border-slate-300 p-3 text-slate-950"
-                placeholder="Optional notes"
-              />
-            </div>
-
-            <div className="flex gap-3">
-              <button className="rounded-xl bg-slate-950 px-5 py-3 font-bold text-white hover:bg-slate-800">
-                {editingId ? "Update Expense" : "Save Expense"}
-              </button>
-            </div>
-
-            {message && (
-              <p className="rounded-xl bg-slate-100 p-3 text-sm font-bold text-slate-900">
-                {message}
-              </p>
-            )}
-          </form>
-        </section>
 
         <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -1342,5 +1408,31 @@ export default function ExpensesPage() {
         </section>
       </div>
     </main>
+  );
+}
+
+function FormField({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-sm font-bold text-slate-950">
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function SummaryCard({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-2xl bg-slate-50 p-5 ring-1 ring-slate-200">
+      <p className="text-sm font-bold text-slate-700">{label}</p>
+      <p className="mt-2 text-2xl font-black text-slate-950">{value}</p>
+    </div>
   );
 }
