@@ -93,12 +93,12 @@ type Estimate = {
 
 type DraftLineItem = {
   id: number;
+  mode: "preset" | "custom";
   type: string;
   quantity: string;
   rate: string;
   unit: string;
   saveAsPreset: boolean;
-  isCustom: boolean;
 };
 
 function formatCurrency(value: number) {
@@ -139,13 +139,13 @@ function getEstimateExpenseTotal(expenses: Expense[], estimateId: string) {
 
 function makeDefaultLineItem(): DraftLineItem {
   return {
-    id: Date.now(),
+    id: Date.now() + Math.floor(Math.random() * 10000),
+    mode: "preset",
     type: "Framing",
     quantity: "",
     rate: defaultLaborRates.Framing.rate.toString(),
     unit: defaultLaborRates.Framing.unit,
     saveAsPreset: false,
-isCustom: false,
   };
 }
 
@@ -185,7 +185,7 @@ export default function EstimatesNewPage() {
   ]);
 
   const presetOptions = useMemo(() => {
-    const customOptions = lineItemPresets.reduce<
+    const savedOptions = lineItemPresets.reduce<
       Record<string, { rate: number; unit: string }>
     >((acc, preset) => {
       acc[preset.name] = {
@@ -197,7 +197,7 @@ export default function EstimatesNewPage() {
 
     return {
       ...defaultLaborRates,
-      ...customOptions,
+      ...savedOptions,
     };
   }, [lineItemPresets]);
 
@@ -250,37 +250,62 @@ export default function EstimatesNewPage() {
       prev.map((item) => {
         if (item.id !== id) return item;
 
-        if (field === "type") {
-          const nextType = String(value);
-
-if (nextType === "__custom__") {
-  return {
-    ...item,
-    type: "",
-    rate: "",
-    unit: "flat amount",
-    saveAsPreset: true,
-    isCustom: true,
-  };
-}
-
-          const selectedPreset = presetOptions[nextType];
-
-return {
-  ...item,
-  type: nextType,
-  rate: selectedPreset ? String(selectedPreset.rate) : item.rate,
-  unit: selectedPreset?.unit || item.unit || "flat amount",
-  saveAsPreset: false,
-  isCustom: false,
-};
-        }
-
         return {
           ...item,
           [field]: value,
         };
       })
+    );
+  }
+
+  function selectPresetLineItem(id: number, presetName: string) {
+    const selectedPreset = presetOptions[presetName];
+
+    setLineItems((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              mode: "preset",
+              type: presetName,
+              rate: selectedPreset ? String(selectedPreset.rate) : item.rate,
+              unit: selectedPreset?.unit || "flat amount",
+              saveAsPreset: false,
+            }
+          : item
+      )
+    );
+  }
+
+  function switchToCustomLineItem(id: number) {
+    setLineItems((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              mode: "custom",
+              type: "",
+              rate: "",
+              unit: "flat amount",
+              saveAsPreset: true,
+            }
+          : item
+      )
+    );
+  }
+
+  function updateCustomLineItemName(id: number, customName: string) {
+    setLineItems((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              mode: "custom",
+              type: customName,
+              saveAsPreset: true,
+            }
+          : item
+      )
     );
   }
 
@@ -333,7 +358,7 @@ return {
       .order("name", { ascending: true });
 
     if (error) {
-      setMessage(`Error loading line item presets: ${error.message}`);
+      setMessage(`Error loading saved line item types: ${error.message}`);
       return;
     }
 
@@ -549,7 +574,7 @@ return {
     );
 
     const presetsToInsert = lineItems
-      .filter((item) => item.saveAsPreset)
+      .filter((item) => item.mode === "custom" && item.saveAsPreset)
       .map((item) => ({
         user_id: currentUserId,
         name: item.type.trim(),
@@ -731,15 +756,19 @@ return {
     setSelectedCustomerId(estimate.customer_id || "");
     setIsNewCustomer(!estimate.customer_id);
 
-    const mappedLineItems: DraftLineItem[] = estimate.line_items.map((item) => ({
-      id: Date.now() + Math.floor(Math.random() * 10000),
-      type: item.type,
-      quantity: String(item.quantity),
-      rate: String(item.rate),
-      unit: presetOptions[item.type]?.unit || "custom",
-      saveAsPreset: false,
-isCustom: !presetOptions[item.type],
-    }));
+    const mappedLineItems: DraftLineItem[] = estimate.line_items.map((item) => {
+      const isSavedPreset = Boolean(presetOptions[item.type]);
+
+      return {
+        id: Date.now() + Math.floor(Math.random() * 10000),
+        mode: isSavedPreset ? "preset" : "custom",
+        type: item.type,
+        quantity: String(item.quantity),
+        rate: String(item.rate),
+        unit: presetOptions[item.type]?.unit || "flat amount",
+        saveAsPreset: false,
+      };
+    });
 
     setLineItems(
       mappedLineItems.length > 0 ? mappedLineItems : [makeDefaultLineItem()]
@@ -976,14 +1005,18 @@ isCustom: !presetOptions[item.type],
             </div>
 
             <div className="space-y-4">
-              <h2 className="text-2xl font-bold text-gray-900">Line Items</h2>
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Line Items</h2>
+                <p className="mt-1 text-sm text-gray-600">
+                  Pick a saved type or choose Custom to add your own. Custom types can be saved for future estimates.
+                </p>
+              </div>
 
               {lineItems.map((item, index) => {
                 const lineTotal =
                   Number(item.quantity || 0) * Number(item.rate || 0);
 
                 const presetNames = Object.keys(presetOptions);
-                const isCustomType = item.isCustom;
 
                 return (
                   <div
@@ -1009,14 +1042,21 @@ isCustom: !presetOptions[item.type],
                     <div className="grid gap-4 md:grid-cols-4">
                       <div>
                         <label className="mb-1 block text-sm font-medium text-gray-900">
-                          Type
+                          Work Type
                         </label>
 
                         <select
-                          value={isCustomType || item.type === "" ? "__custom__" : item.type}
-                          onChange={(e) =>
-                            updateLineItem(item.id, "type", e.target.value)
-                          }
+                          value={item.mode === "custom" ? "__custom__" : item.type}
+                          onChange={(e) => {
+                            const nextValue = e.target.value;
+
+                            if (nextValue === "__custom__") {
+                              switchToCustomLineItem(item.id);
+                              return;
+                            }
+
+                            selectPresetLineItem(item.id, nextValue);
+                          }}
                           className="w-full rounded-lg border p-3 text-gray-900"
                         >
                           {presetNames.map((type) => (
@@ -1024,33 +1064,20 @@ isCustom: !presetOptions[item.type],
                               {type}
                             </option>
                           ))}
-                          <option value="__custom__">Custom</option>
+                          <option value="__custom__">Custom type...</option>
                         </select>
 
-                        {(isCustomType || item.type === "") && (
+                        {item.mode === "custom" && (
                           <>
                             <input
-  type="text"
-  value={item.type}
-  onChange={(e) => {
-    const customValue = e.target.value;
-
-    setLineItems((prev) =>
-      prev.map((lineItem) =>
-        lineItem.id === item.id
-          ? {
-              ...lineItem,
-              type: customValue,
-              isCustom: true,
-              saveAsPreset: true,
-            }
-          : lineItem
-      )
-    );
-  }}
-  placeholder="Custom type, e.g. Tile Shower Pan"
-  className="mt-2 w-full rounded-lg border p-3 text-gray-900"
-/>
+                              type="text"
+                              value={item.type}
+                              onChange={(e) =>
+                                updateCustomLineItemName(item.id, e.target.value)
+                              }
+                              placeholder="Example: Tile Shower Pan"
+                              className="mt-2 w-full rounded-lg border p-3 text-gray-900"
+                            />
 
                             <input
                               type="text"
@@ -1058,7 +1085,7 @@ isCustom: !presetOptions[item.type],
                               onChange={(e) =>
                                 updateLineItem(item.id, "unit", e.target.value)
                               }
-                              placeholder="Unit, e.g. flat amount"
+                              placeholder="Unit, e.g. flat amount, per hour, per sq ft"
                               className="mt-2 w-full rounded-lg border p-3 text-gray-900"
                             />
 
@@ -1074,7 +1101,7 @@ isCustom: !presetOptions[item.type],
                                   )
                                 }
                               />
-                              Save as reusable type
+                              Save this type for future estimates
                             </label>
                           </>
                         )}
