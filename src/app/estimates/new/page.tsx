@@ -1030,14 +1030,27 @@ isCustom: !presetOptions[item.type],
                         {(isCustomType || item.type === "") && (
                           <>
                             <input
-                              type="text"
-                              value={item.type}
-                              onChange={(e) =>
-                                updateLineItem(item.id, "type", e.target.value)
-                              }
-                              placeholder="Custom type, e.g. Cabinets"
-                              className="mt-2 w-full rounded-lg border p-3 text-gray-900"
-                            />
+  type="text"
+  value={item.type}
+  onChange={(e) => {
+    const customValue = e.target.value;
+
+    setLineItems((prev) =>
+      prev.map((lineItem) =>
+        lineItem.id === item.id
+          ? {
+              ...lineItem,
+              type: customValue,
+              isCustom: true,
+              saveAsPreset: true,
+            }
+          : lineItem
+      )
+    );
+  }}
+  placeholder="Custom type, e.g. Tile Shower Pan"
+  className="mt-2 w-full rounded-lg border p-3 text-gray-900"
+/>
 
                             <input
                               type="text"
