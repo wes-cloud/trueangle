@@ -7,7 +7,24 @@ import { supabase } from "@/lib/supabase";
 
 type SubscriptionStatus = "loading" | "allowed" | "blocked" | "signed-out";
 
-const PUBLIC_PATHS = ["/", "/start-trial", "/auth", "/trial-success"];
+const PUBLIC_PATHS = [
+  "/",
+  "/auth",
+  "/start-trial",
+  "/trial-success",
+];
+
+const PUBLIC_PREFIXES = [
+  "/approve-estimate",
+];
+
+function isPublicPath(pathname: string | null) {
+  if (!pathname) return true;
+
+  if (PUBLIC_PATHS.includes(pathname)) return true;
+
+  return PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+}
 
 export default function SubscriptionGate({
   children,
@@ -16,44 +33,69 @@ export default function SubscriptionGate({
 }) {
   const pathname = usePathname();
   const [status, setStatus] = useState<SubscriptionStatus>("loading");
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
+    let isMounted = true;
+
     async function checkSubscription() {
-      if (PUBLIC_PATHS.includes(pathname)) {
-        setStatus("allowed");
-        return;
+      try {
+        setStatus("loading");
+        setMessage("");
+
+        if (isPublicPath(pathname)) {
+          if (isMounted) setStatus("allowed");
+          return;
+        }
+
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
+
+        if (userError) {
+          throw new Error(userError.message);
+        }
+
+        if (!user) {
+          if (isMounted) setStatus("signed-out");
+          return;
+        }
+
+        const res = await fetch("/api/access/check", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            userId: user.id,
+          }),
+        });
+
+        if (!res.ok) {
+          throw new Error("Could not check account access.");
+        }
+
+        const data = await res.json();
+
+        if (isMounted) {
+          setStatus(data.allowed ? "allowed" : "blocked");
+        }
+      } catch (err) {
+        const error = err as Error;
+
+        if (isMounted) {
+          setMessage(error.message || "Access check failed.");
+          setStatus("allowed");
+        }
       }
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
-        setStatus("signed-out");
-        return;
-      }
-
-      const res = await fetch("/api/access/check", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          userId: user.id,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (data.allowed) {
-        setStatus("allowed");
-        return;
-      }
-
-      setStatus("blocked");
     }
 
     checkSubscription();
+
+    return () => {
+      isMounted = false;
+    };
   }, [pathname]);
 
   if (status === "loading") {
@@ -67,7 +109,16 @@ export default function SubscriptionGate({
   }
 
   if (status === "allowed" || status === "signed-out") {
-    return <>{children}</>;
+    return (
+      <>
+        {message && (
+          <div className="bg-yellow-50 px-4 py-2 text-sm font-semibold text-yellow-900">
+            {message}
+          </div>
+        )}
+        {children}
+      </>
+    );
   }
 
   return (
