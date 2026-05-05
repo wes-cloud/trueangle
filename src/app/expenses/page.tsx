@@ -9,6 +9,8 @@ type AuthUser = {
   email?: string | null;
 };
 
+type CompanyRole = "owner" | "bookkeeper" | "viewer" | null;
+
 type Customer = {
   id: string;
   full_name: string;
@@ -178,6 +180,8 @@ export default function ExpensesPage() {
 
   const [authLoading, setAuthLoading] = useState(true);
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [companyRole, setCompanyRole] = useState<CompanyRole>(null);
+  const [companyUserIds, setCompanyUserIds] = useState<string[]>([]);
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [estimates, setEstimates] = useState<Estimate[]>([]);
@@ -193,6 +197,7 @@ export default function ExpensesPage() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [savingReviewId, setSavingReviewId] = useState<string | null>(null);
 
   const [csvRows, setCsvRows] = useState<CsvExpenseRow[]>([]);
   const [csvFileName, setCsvFileName] = useState("");
@@ -207,11 +212,43 @@ export default function ExpensesPage() {
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [newCategory, setNewCategory] = useState("");
 
-  async function fetchCustomers(currentUserId: string) {
+  async function getCompanyAccess(currentUserId: string) {
+    const { data: memberships } = await supabase
+      .from("company_members")
+      .select("company_id, role")
+      .eq("user_id", currentUserId)
+      .limit(1);
+
+    const membership = memberships?.[0];
+
+    if (!membership?.company_id) {
+      return {
+        role: "owner" as CompanyRole,
+        userIds: [currentUserId],
+      };
+    }
+
+    const { data: members } = await supabase
+      .from("company_members")
+      .select("user_id")
+      .eq("company_id", membership.company_id);
+
+    const userIds =
+      members?.map((member) => member.user_id).filter(Boolean) || [
+        currentUserId,
+      ];
+
+    return {
+      role: (membership.role || "owner") as CompanyRole,
+      userIds,
+    };
+  }
+
+  async function fetchCustomers(userIds: string[]) {
     const { data, error } = await supabase
       .from("customers")
       .select("id, full_name")
-      .eq("user_id", currentUserId)
+      .in("user_id", userIds)
       .order("full_name", { ascending: true });
 
     if (error) {
@@ -222,11 +259,11 @@ export default function ExpensesPage() {
     setCustomers((data || []) as Customer[]);
   }
 
-  async function fetchEstimates(currentUserId: string) {
+  async function fetchEstimates(userIds: string[]) {
     const { data, error } = await supabase
       .from("estimates")
       .select("id, customer_id, customer_name, job_name, estimate_number")
-      .eq("user_id", currentUserId)
+      .in("user_id", userIds)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -237,13 +274,13 @@ export default function ExpensesPage() {
     setEstimates((data || []) as Estimate[]);
   }
 
-  async function fetchExpenses(currentUserId: string) {
+  async function fetchExpenses(userIds: string[]) {
     const { data, error } = await supabase
       .from("expenses")
       .select(
         "id, user_id, customer_id, estimate_id, vendor, category, amount, expense_date, notes, created_at"
       )
-      .eq("user_id", currentUserId)
+      .in("user_id", userIds)
       .order("expense_date", { ascending: false })
       .order("created_at", { ascending: false });
 
@@ -257,10 +294,16 @@ export default function ExpensesPage() {
 
   async function loadPageData(currentUserId: string) {
     setMessage("");
+
+    const access = await getCompanyAccess(currentUserId);
+
+    setCompanyRole(access.role);
+    setCompanyUserIds(access.userIds);
+
     await Promise.all([
-      fetchCustomers(currentUserId),
-      fetchEstimates(currentUserId),
-      fetchExpenses(currentUserId),
+      fetchCustomers(access.userIds),
+      fetchEstimates(access.userIds),
+      fetchExpenses(access.userIds),
     ]);
   }
 
@@ -332,11 +375,7 @@ export default function ExpensesPage() {
       return;
     }
 
-    const { error } = await supabase
-      .from("expenses")
-      .delete()
-      .eq("id", id)
-      .eq("user_id", user.id);
+    const { error } = await supabase.from("expenses").delete().eq("id", id);
 
     if (error) {
       setMessage(`Error deleting expense: ${error.message}`);
@@ -349,6 +388,27 @@ export default function ExpensesPage() {
 
     setMessage("Expense deleted successfully.");
     await loadPageData(user.id);
+  }
+
+  async function handleReviewCategoryChange(expenseId: string, newCategory: string) {
+    if (!user) return;
+
+    setSavingReviewId(expenseId);
+    setMessage("");
+
+    const { error } = await supabase
+      .from("expenses")
+      .update({ category: newCategory || null })
+      .eq("id", expenseId);
+
+    if (error) {
+      setMessage(`Error updating category: ${error.message}`);
+      setSavingReviewId(null);
+      return;
+    }
+
+    await loadPageData(user.id);
+    setSavingReviewId(null);
   }
 
   async function handleSaveExpense(e: React.FormEvent<HTMLFormElement>) {
@@ -384,8 +444,7 @@ export default function ExpensesPage() {
       const { error } = await supabase
         .from("expenses")
         .update(payload)
-        .eq("id", editingId)
-        .eq("user_id", user.id);
+        .eq("id", editingId);
 
       if (error) {
         setMessage(`Error updating expense: ${error.message}`);
@@ -415,9 +474,7 @@ export default function ExpensesPage() {
     await loadPageData(user.id);
   }
 
-  async function handleCsvFileChange(
-    e: React.ChangeEvent<HTMLInputElement>
-  ) {
+  async function handleCsvFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -515,7 +572,8 @@ export default function ExpensesPage() {
             const jobMatch =
               normalizeText(estimate.job_name) === normalizeText(row.project);
             const estimateNumberMatch =
-              normalizeText(estimate.estimate_number) === normalizeText(row.project);
+              normalizeText(estimate.estimate_number) ===
+              normalizeText(row.project);
             return jobMatch || estimateNumberMatch;
           });
 
@@ -585,7 +643,8 @@ export default function ExpensesPage() {
       const summary: ImportSummary = {
         importedCount: inserts.length,
         skippedCount: issues.filter(
-          (item) => item.reason === "Missing vendor" || item.reason === "Invalid amount"
+          (item) =>
+            item.reason === "Missing vendor" || item.reason === "Invalid amount"
         ).length,
         unmatchedCount,
         issues,
@@ -617,6 +676,15 @@ export default function ExpensesPage() {
 
   const totalExpenses = useMemo(() => {
     return expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+  }, [expenses]);
+
+  const needsReviewExpenses = useMemo(() => {
+    return expenses.filter(
+      (expense) =>
+        !expense.category ||
+        expense.category.trim() === "" ||
+        expense.category === "Uncategorized"
+    );
   }, [expenses]);
 
   const filteredExpenses = useMemo(() => {
@@ -717,9 +785,9 @@ export default function ExpensesPage() {
 
   if (authLoading) {
     return (
-      <main className="min-h-screen bg-gray-100 p-8">
+      <main className="min-h-screen bg-slate-100 p-8">
         <div className="mx-auto max-w-md rounded-2xl bg-white p-8 shadow">
-          <p className="text-gray-900">Loading...</p>
+          <p className="text-slate-900">Loading...</p>
         </div>
       </main>
     );
@@ -727,10 +795,10 @@ export default function ExpensesPage() {
 
   if (!user) {
     return (
-      <main className="min-h-screen bg-gray-100 p-8">
+      <main className="min-h-screen bg-slate-100 p-8">
         <div className="mx-auto max-w-md rounded-2xl bg-white p-8 shadow">
-          <h1 className="text-3xl font-bold text-gray-900">Expenses</h1>
-          <p className="mt-3 text-gray-600">
+          <h1 className="text-3xl font-bold text-slate-950">Expenses</h1>
+          <p className="mt-3 text-slate-700">
             You need to sign in from the dashboard first.
           </p>
         </div>
@@ -739,51 +807,127 @@ export default function ExpensesPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-100 p-8 text-gray-900">
+    <main className="min-h-screen bg-slate-100 p-8 text-slate-950">
       <AppNav onSignOut={handleSignOut} />
 
       <div className="mx-auto max-w-6xl space-y-8">
-        <div className="rounded-3xl bg-gradient-to-r from-white to-gray-50 p-8 shadow-sm ring-1 ring-gray-200">
+        <section className="rounded-3xl bg-gradient-to-r from-white to-slate-50 p-8 shadow-sm ring-1 ring-slate-200">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-sm font-medium uppercase tracking-wide text-gray-500">
+              <p className="text-sm font-bold uppercase tracking-wide text-slate-500">
                 Expenses
               </p>
-              <h1 className="mt-2 text-3xl font-bold text-gray-900">
+              <h1 className="mt-2 text-3xl font-black text-slate-950">
                 Job Expense Tracking
               </h1>
-              <p className="mt-1 text-sm text-gray-600">
+              <p className="mt-1 text-sm font-medium text-slate-700">
                 Signed in as {user.email || "User"}
+                {companyRole && companyRole !== "owner"
+                  ? ` · ${companyRole} access`
+                  : ""}
               </p>
             </div>
 
-            <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-200">
-              <p className="text-sm text-gray-500">Total Expenses</p>
-              <p className="mt-2 text-2xl font-bold text-gray-900">
+            <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+              <p className="text-sm font-semibold text-slate-500">
+                Total Expenses
+              </p>
+              <p className="mt-2 text-2xl font-black text-slate-950">
                 {formatCurrency(totalExpenses)}
               </p>
             </div>
           </div>
-        </div>
+        </section>
 
-        <div className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
+        {needsReviewExpenses.length > 0 ? (
+          <section className="rounded-3xl bg-yellow-50 p-8 shadow-sm ring-1 ring-yellow-200">
+            <div className="mb-5 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h2 className="text-2xl font-black text-yellow-950">
+                  Needs Review ({needsReviewExpenses.length})
+                </h2>
+                <p className="mt-1 text-sm font-semibold text-yellow-900">
+                  Categorize these so your books aren’t a mess.
+                </p>
+              </div>
+
+              <p className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-yellow-900 ring-1 ring-yellow-200">
+                Bookkeeper fast lane
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {needsReviewExpenses.slice(0, 10).map((expense) => (
+                <div
+                  key={expense.id}
+                  className="flex flex-col gap-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-yellow-100 md:flex-row md:items-center md:justify-between"
+                >
+                  <div>
+                    <p className="font-black text-slate-950">
+                      {expense.vendor || "No Vendor"}
+                    </p>
+                    <p className="text-sm font-medium text-slate-600">
+                      {formatDate(expense.expense_date || expense.created_at)}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <select
+                      defaultValue={expense.category || ""}
+                      onChange={(e) =>
+                        handleReviewCategoryChange(expense.id, e.target.value)
+                      }
+                      className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-950"
+                    >
+                      <option value="">Select category</option>
+                      {categories.map((item) => (
+                        <option key={item} value={item}>
+                          {item}
+                        </option>
+                      ))}
+                    </select>
+
+                    <p className="min-w-28 text-left font-black text-slate-950 sm:text-right">
+                      {formatCurrency(Number(expense.amount || 0))}
+                    </p>
+
+                    {savingReviewId === expense.id && (
+                      <span className="text-xs font-bold text-slate-500">
+                        Saving...
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : (
+          <section className="rounded-3xl bg-green-50 p-6 shadow-sm ring-1 ring-green-200">
+            <p className="font-black text-green-950">
+              You’re all caught up. No expenses need review.
+            </p>
+            <p className="mt-1 text-sm font-semibold text-green-900">
+              Nice work. The books are cleaner than a freshly swept jobsite.
+            </p>
+          </section>
+        )}
+
+        <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-2xl font-bold text-gray-900">CSV Import</h2>
+            <h2 className="text-2xl font-black text-slate-950">CSV Import</h2>
 
             <button
               type="button"
               onClick={handleDownloadTemplate}
-              className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50"
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-950 hover:bg-slate-50"
             >
               Download Template
             </button>
           </div>
 
-          <p className="mb-4 text-sm text-gray-600">
+          <p className="mb-4 text-sm font-medium text-slate-700">
             Use headers like:{" "}
-            <strong>
-              date, vendor, category, amount, notes, customer, project
-            </strong>
+            <strong>date, vendor, category, amount, notes, customer, project</strong>
           </p>
 
           <input
@@ -798,12 +942,12 @@ export default function ExpensesPage() {
           <div className="space-y-2">
             <label
               htmlFor="csv-upload"
-              className="inline-block cursor-pointer rounded-xl bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+              className="inline-block cursor-pointer rounded-xl bg-slate-950 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800"
             >
               Import CSV
             </label>
 
-            <p className="text-sm text-gray-500">
+            <p className="text-sm font-medium text-slate-500">
               {csvFileName ? csvFileName : "No file selected"}
             </p>
           </div>
@@ -811,7 +955,7 @@ export default function ExpensesPage() {
           {csvRows.length > 0 && (
             <>
               <div className="mt-6 flex items-center justify-between">
-                <p className="text-sm text-gray-600">
+                <p className="text-sm font-medium text-slate-700">
                   {csvRows.length} row{csvRows.length === 1 ? "" : "s"} ready to
                   import
                 </p>
@@ -820,33 +964,33 @@ export default function ExpensesPage() {
                   type="button"
                   onClick={handleImportCsv}
                   disabled={isImporting}
-                  className={`rounded-xl px-4 py-2 text-sm font-medium text-white ${
+                  className={`rounded-xl px-4 py-2 text-sm font-bold text-white ${
                     isImporting
-                      ? "cursor-not-allowed bg-gray-400"
-                      : "bg-green-600 hover:bg-green-700"
+                      ? "cursor-not-allowed bg-slate-400"
+                      : "bg-green-700 hover:bg-green-800"
                   }`}
                 >
                   {isImporting ? "Importing..." : "Confirm Import"}
                 </button>
               </div>
 
-              <div className="mt-4 overflow-x-auto rounded-2xl border border-gray-200">
+              <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200">
                 <table className="min-w-full border-collapse text-sm">
-                  <thead className="bg-gray-50">
+                  <thead className="bg-slate-50">
                     <tr>
-                      <th className="px-4 py-3 text-left font-semibold">Date</th>
-                      <th className="px-4 py-3 text-left font-semibold">Vendor</th>
-                      <th className="px-4 py-3 text-left font-semibold">Category</th>
-                      <th className="px-4 py-3 text-left font-semibold">Amount</th>
-                      <th className="px-4 py-3 text-left font-semibold">Customer</th>
-                      <th className="px-4 py-3 text-left font-semibold">Project</th>
+                      <th className="px-4 py-3 text-left font-bold">Date</th>
+                      <th className="px-4 py-3 text-left font-bold">Vendor</th>
+                      <th className="px-4 py-3 text-left font-bold">Category</th>
+                      <th className="px-4 py-3 text-left font-bold">Amount</th>
+                      <th className="px-4 py-3 text-left font-bold">Customer</th>
+                      <th className="px-4 py-3 text-left font-bold">Project</th>
                     </tr>
                   </thead>
                   <tbody>
                     {csvRows.slice(0, 10).map((row, index) => (
                       <tr
                         key={`${row.vendor}-${index}`}
-                        className="border-t border-gray-200"
+                        className="border-t border-slate-200"
                       >
                         <td className="px-4 py-3">{row.date || "—"}</td>
                         <td className="px-4 py-3">{row.vendor || "—"}</td>
@@ -861,50 +1005,52 @@ export default function ExpensesPage() {
               </div>
             </>
           )}
-        </div>
+        </section>
 
         {importSummary && (
-          <div className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
-            <h2 className="text-2xl font-bold text-gray-900">Import Results</h2>
+          <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
+            <h2 className="text-2xl font-black text-slate-950">
+              Import Results
+            </h2>
 
             <div className="mt-6 grid gap-4 md:grid-cols-3">
               <div className="rounded-2xl bg-green-50 p-5 ring-1 ring-green-200">
-                <p className="text-sm text-green-700">Imported</p>
-                <p className="mt-2 text-2xl font-bold text-green-900">
+                <p className="text-sm font-bold text-green-700">Imported</p>
+                <p className="mt-2 text-2xl font-black text-green-950">
                   {importSummary.importedCount}
                 </p>
               </div>
 
               <div className="rounded-2xl bg-yellow-50 p-5 ring-1 ring-yellow-200">
-                <p className="text-sm text-yellow-700">Skipped</p>
-                <p className="mt-2 text-2xl font-bold text-yellow-900">
+                <p className="text-sm font-bold text-yellow-700">Skipped</p>
+                <p className="mt-2 text-2xl font-black text-yellow-950">
                   {importSummary.skippedCount}
                 </p>
               </div>
 
               <div className="rounded-2xl bg-blue-50 p-5 ring-1 ring-blue-200">
-                <p className="text-sm text-blue-700">Unmatched</p>
-                <p className="mt-2 text-2xl font-bold text-blue-900">
+                <p className="text-sm font-bold text-blue-700">Unmatched</p>
+                <p className="mt-2 text-2xl font-black text-blue-950">
                   {importSummary.unmatchedCount}
                 </p>
               </div>
             </div>
 
             {importSummary.issues.length > 0 && (
-              <div className="mt-6 overflow-x-auto rounded-2xl border border-gray-200">
+              <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-200">
                 <table className="min-w-full border-collapse text-sm">
-                  <thead className="bg-gray-50">
+                  <thead className="bg-slate-50">
                     <tr>
-                      <th className="px-4 py-3 text-left font-semibold">Row</th>
-                      <th className="px-4 py-3 text-left font-semibold">Vendor</th>
-                      <th className="px-4 py-3 text-left font-semibold">Issue</th>
+                      <th className="px-4 py-3 text-left font-bold">Row</th>
+                      <th className="px-4 py-3 text-left font-bold">Vendor</th>
+                      <th className="px-4 py-3 text-left font-bold">Issue</th>
                     </tr>
                   </thead>
                   <tbody>
                     {importSummary.issues.map((issue, index) => (
                       <tr
                         key={`${issue.rowNumber}-${index}`}
-                        className="border-t border-gray-200"
+                        className="border-t border-slate-200"
                       >
                         <td className="px-4 py-3">{issue.rowNumber}</td>
                         <td className="px-4 py-3">{issue.vendor || "—"}</td>
@@ -915,12 +1061,12 @@ export default function ExpensesPage() {
                 </table>
               </div>
             )}
-          </div>
+          </section>
         )}
 
-        <div className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
+        <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-2xl font-bold text-gray-900">
+            <h2 className="text-2xl font-black text-slate-950">
               {editingId ? "Edit Expense" : "Add Expense"}
             </h2>
 
@@ -928,7 +1074,7 @@ export default function ExpensesPage() {
               <button
                 type="button"
                 onClick={resetForm}
-                className="rounded-xl border border-gray-300 px-4 py-2 text-gray-900"
+                className="rounded-xl border border-slate-300 px-4 py-2 font-bold text-slate-950"
               >
                 Switch to New Expense
               </button>
@@ -938,28 +1084,28 @@ export default function ExpensesPage() {
           <form onSubmit={handleSaveExpense} className="space-y-6">
             <div className="grid gap-4 md:grid-cols-4">
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
+                <label className="mb-1 block text-sm font-bold text-slate-950">
                   Vendor
                 </label>
                 <input
                   type="text"
                   value={vendor}
                   onChange={(e) => setVendor(e.target.value)}
-                  className="w-full rounded-lg border p-3 text-gray-900"
+                  className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
                   placeholder="Home Depot"
                   required
                 />
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
+                <label className="mb-1 block text-sm font-bold text-slate-950">
                   Category
                 </label>
                 <div className="space-y-2">
                   <select
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
-                    className="w-full rounded-lg border p-3 text-gray-900"
+                    className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
                   >
                     <option value="">Select category</option>
                     {categories.map((item) => (
@@ -973,7 +1119,7 @@ export default function ExpensesPage() {
                     <button
                       type="button"
                       onClick={() => setShowAddCategory(true)}
-                      className="text-sm text-blue-600 hover:underline"
+                      className="text-sm font-bold text-blue-700 hover:underline"
                     >
                       + Add Category
                     </button>
@@ -984,12 +1130,12 @@ export default function ExpensesPage() {
                         value={newCategory}
                         onChange={(e) => setNewCategory(e.target.value)}
                         placeholder="New category"
-                        className="flex-1 rounded-lg border p-2 text-sm text-gray-900"
+                        className="flex-1 rounded-lg border border-slate-300 p-2 text-sm text-slate-950"
                       />
                       <button
                         type="button"
                         onClick={handleAddCategory}
-                        className="rounded-lg bg-black px-3 py-2 text-sm text-white"
+                        className="rounded-lg bg-slate-950 px-3 py-2 text-sm font-bold text-white"
                       >
                         Add
                       </button>
@@ -999,7 +1145,7 @@ export default function ExpensesPage() {
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
+                <label className="mb-1 block text-sm font-bold text-slate-950">
                   Amount
                 </label>
                 <input
@@ -1007,34 +1153,34 @@ export default function ExpensesPage() {
                   step="0.01"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  className="w-full rounded-lg border p-3 text-gray-900"
+                  className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
                   placeholder="0.00"
                   required
                 />
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
+                <label className="mb-1 block text-sm font-bold text-slate-950">
                   Expense Date
                 </label>
                 <input
                   type="date"
                   value={expenseDate}
                   onChange={(e) => setExpenseDate(e.target.value)}
-                  className="w-full rounded-lg border p-3 text-gray-900"
+                  className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
                 />
               </div>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
+                <label className="mb-1 block text-sm font-bold text-slate-950">
                   Customer
                 </label>
                 <select
                   value={selectedCustomerId}
                   onChange={(e) => setSelectedCustomerId(e.target.value)}
-                  className="w-full rounded-lg border p-3 text-gray-900"
+                  className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
                 >
                   <option value="">No customer</option>
                   {customers.map((customer) => (
@@ -1046,13 +1192,13 @@ export default function ExpensesPage() {
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
+                <label className="mb-1 block text-sm font-bold text-slate-950">
                   Project / Estimate
                 </label>
                 <select
                   value={selectedEstimateId}
                   onChange={(e) => handleEstimateChange(e.target.value)}
-                  className="w-full rounded-lg border p-3 text-gray-900"
+                  className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
                 >
                   <option value="">No project</option>
                   {estimates.map((estimate) => (
@@ -1071,37 +1217,41 @@ export default function ExpensesPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-900">
+              <label className="mb-1 block text-sm font-bold text-slate-950">
                 Notes
               </label>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="min-h-[100px] w-full rounded-lg border p-3 text-gray-900"
+                className="min-h-[100px] w-full rounded-xl border border-slate-300 p-3 text-slate-950"
                 placeholder="Optional notes"
               />
             </div>
 
             <div className="flex gap-3">
-              <button className="rounded-xl bg-black px-4 py-2 text-white">
+              <button className="rounded-xl bg-slate-950 px-5 py-3 font-bold text-white hover:bg-slate-800">
                 {editingId ? "Update Expense" : "Save Expense"}
               </button>
             </div>
 
-            {message && <p className="text-gray-900">{message}</p>}
+            {message && (
+              <p className="rounded-xl bg-slate-100 p-3 text-sm font-bold text-slate-900">
+                {message}
+              </p>
+            )}
           </form>
-        </div>
+        </section>
 
-        <div className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
+        <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-2xl font-bold text-gray-900">
+            <h2 className="text-2xl font-black text-slate-950">
               Saved Expenses
             </h2>
 
             <select
               value={expenseFilter}
               onChange={(e) => setExpenseFilter(e.target.value as ExpenseFilter)}
-              className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm text-gray-900"
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-950"
             >
               <option value="all">All Expenses</option>
               <option value="month">This Month</option>
@@ -1111,7 +1261,9 @@ export default function ExpensesPage() {
           </div>
 
           {filteredExpenses.length === 0 ? (
-            <p className="text-gray-600">No expenses found for this filter.</p>
+            <p className="font-medium text-slate-600">
+              No expenses found for this filter.
+            </p>
           ) : (
             <div className="space-y-4">
               {filteredExpenses.map((expense) => {
@@ -1125,41 +1277,41 @@ export default function ExpensesPage() {
                 return (
                   <div
                     key={expense.id}
-                    className="rounded-2xl border border-gray-200 p-4"
+                    className="rounded-2xl border border-slate-200 p-4"
                   >
                     <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                       <div>
-                        <p className="text-lg font-bold text-gray-900">
+                        <p className="text-lg font-black text-slate-950">
                           {expense.vendor || "No Vendor"}
                         </p>
-                        <p className="text-sm text-gray-700">
+                        <p className="text-sm font-semibold text-slate-700">
                           {expense.category || "Uncategorized"}
                         </p>
 
                         {linkedCustomer && (
-                          <p className="text-sm text-gray-700">
+                          <p className="text-sm font-medium text-slate-700">
                             Customer: {linkedCustomer.full_name}
                           </p>
                         )}
 
                         {linkedEstimate && (
-                          <p className="text-sm text-gray-700">
+                          <p className="text-sm font-medium text-slate-700">
                             Project: {linkedEstimate.job_name || "Untitled Job"}
                           </p>
                         )}
 
                         {expense.notes && (
-                          <p className="mt-2 text-sm text-gray-600">
+                          <p className="mt-2 text-sm font-medium text-slate-600">
                             {expense.notes}
                           </p>
                         )}
                       </div>
 
                       <div className="text-left md:text-right">
-                        <p className="text-lg font-bold text-gray-900">
+                        <p className="text-lg font-black text-slate-950">
                           {formatCurrency(Number(expense.amount || 0))}
                         </p>
-                        <p className="text-sm text-gray-500">
+                        <p className="text-sm font-medium text-slate-500">
                           {formatDate(expense.expense_date || expense.created_at)}
                         </p>
                       </div>
@@ -1169,7 +1321,7 @@ export default function ExpensesPage() {
                       <button
                         type="button"
                         onClick={() => handleEdit(expense)}
-                        className="rounded-xl bg-blue-600 px-3 py-1 text-white"
+                        className="rounded-xl bg-blue-700 px-3 py-1 font-bold text-white hover:bg-blue-800"
                       >
                         Edit
                       </button>
@@ -1177,7 +1329,7 @@ export default function ExpensesPage() {
                       <button
                         type="button"
                         onClick={() => handleDeleteExpense(expense.id)}
-                        className="rounded-xl bg-red-600 px-3 py-1 text-white"
+                        className="rounded-xl bg-red-700 px-3 py-1 font-bold text-white hover:bg-red-800"
                       >
                         Delete
                       </button>
@@ -1187,7 +1339,7 @@ export default function ExpensesPage() {
               })}
             </div>
           )}
-        </div>
+        </section>
       </div>
     </main>
   );
