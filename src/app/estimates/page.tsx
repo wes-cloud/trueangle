@@ -13,6 +13,7 @@ type Estimate = {
   amount: number | null;
   created_at: string | null;
   status: string | null;
+  converted_invoice_id: string | null;
 };
 
 function formatCurrency(value: number) {
@@ -28,21 +29,16 @@ function formatDate(value: string | null) {
 }
 
 function formatStatus(status: string | null) {
-  if (!status) return "Draft";
-
   switch (status) {
-    case "draft":
-      return "Draft";
     case "sent":
       return "Sent";
-    case "accepted":
-      return "Accepted";
-    case "completed":
-      return "Completed";
-    case "invoiced":
-      return "Invoiced";
+    case "approved":
+      return "Approved";
+    case "converted":
+      return "Converted";
+    case "draft":
     default:
-      return status.charAt(0).toUpperCase() + status.slice(1);
+      return "Draft";
   }
 }
 
@@ -50,12 +46,10 @@ function getStatusColor(status: string | null) {
   switch (status) {
     case "sent":
       return "bg-yellow-100 text-yellow-800";
-    case "accepted":
-      return "bg-green-100 text-green-800";
-    case "completed":
+    case "approved":
       return "bg-blue-100 text-blue-800";
-    case "invoiced":
-      return "bg-purple-100 text-purple-800";
+    case "converted":
+      return "bg-green-100 text-green-800";
     default:
       return "bg-gray-100 text-gray-800";
   }
@@ -79,10 +73,9 @@ export default function EstimatesPage() {
       const { data } = await supabase
         .from("estimates")
         .select(
-          "id, customer_name, job_name, estimate_number, amount, created_at, status"
+          "id, customer_name, job_name, estimate_number, amount, created_at, status, converted_invoice_id"
         )
         .eq("user_id", user.id)
-        .neq("status", "invoiced")
         .order("created_at", { ascending: false });
 
       setEstimates((data || []) as Estimate[]);
@@ -121,63 +114,87 @@ export default function EstimatesPage() {
 
         {estimates.length === 0 ? (
           <div className="rounded-xl bg-white p-6 shadow">
-            <p>No active estimates right now.</p>
+            <p>No estimates yet.</p>
           </div>
         ) : (
           <div className="space-y-4">
-            {estimates.map((estimate) => (
-              <div
-                key={estimate.id}
-                className="rounded-xl bg-white p-5 shadow"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <div>
-                    <p className="text-lg font-bold text-gray-900">
-                      {estimate.customer_name || "No Customer"}
-                    </p>
-                    <p className="text-gray-700">
-                      {estimate.job_name || "No Job Name"}
-                    </p>
-                    <p className="text-sm text-gray-700">
-                      Estimate #: {estimate.estimate_number || "—"}
-                    </p>
-                    <p className="text-sm text-gray-700">
-                      Created: {formatDate(estimate.created_at)}
-                    </p>
+            {estimates.map((estimate) => {
+              const isConverted = !!estimate.converted_invoice_id;
 
-                    <span
-                      className={`mt-2 inline-block rounded px-2 py-1 text-xs font-medium ${getStatusColor(
-                        estimate.status
-                      )}`}
+              return (
+                <div
+                  key={estimate.id}
+                  className="rounded-xl bg-white p-5 shadow"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                      <p className="text-lg font-bold text-gray-900">
+                        {estimate.customer_name || "No Customer"}
+                      </p>
+
+                      <p className="text-gray-700">
+                        {estimate.job_name || "No Job Name"}
+                      </p>
+
+                      <p className="text-sm text-gray-700">
+                        Estimate #: {estimate.estimate_number || "—"}
+                      </p>
+
+                      <p className="text-sm text-gray-700">
+                        Created: {formatDate(estimate.created_at)}
+                      </p>
+
+                      <div className="mt-2 flex items-center gap-2">
+                        <span
+                          className={`rounded px-2 py-1 text-xs font-medium ${getStatusColor(
+                            estimate.status
+                          )}`}
+                        >
+                          {formatStatus(estimate.status)}
+                        </span>
+
+                        {isConverted && (
+                          <span className="rounded bg-green-50 px-2 py-1 text-xs font-semibold text-green-800">
+                            Invoice Created
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <p className="text-xl font-semibold text-gray-900">
+                        {formatCurrency(Number(estimate.amount))}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <Link
+                      href={`/estimates/${estimate.id}`}
+                      className="rounded bg-black px-3 py-1 text-white"
                     >
-                      {formatStatus(estimate.status)}
-                    </span>
-                  </div>
+                      View
+                    </Link>
 
-                  <div className="text-right">
-                    <p className="text-xl font-semibold text-gray-900">
-                      {formatCurrency(Number(estimate.amount))}
-                    </p>
+                    <Link
+                      href={`/estimates/new?id=${estimate.id}`}
+                      className="rounded bg-blue-600 px-3 py-1 text-white"
+                    >
+                      Edit
+                    </Link>
+
+                    {estimate.converted_invoice_id && (
+                      <Link
+                        href={`/invoices?invoice_id=${estimate.converted_invoice_id}`}
+                        className="rounded bg-green-600 px-3 py-1 text-white"
+                      >
+                        View Invoice
+                      </Link>
+                    )}
                   </div>
                 </div>
-
-                <div className="mt-4 flex gap-3">
-                  <Link
-                    href={`/estimates/${estimate.id}`}
-                    className="rounded bg-black px-3 py-1 text-white"
-                  >
-                    View Project
-                  </Link>
-
-                  <Link
-                    href={`/estimates/new?id=${estimate.id}`}
-                    className="rounded bg-blue-600 px-3 py-1 text-white"
-                  >
-                    Edit
-                  </Link>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
