@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import AppNav from "@/components/AppNav";
 import OnboardingChecklist from "@/components/OnboardingChecklist";
 import TrialBanner from "@/components/TrialBanner";
@@ -52,6 +53,12 @@ type PlaidTransaction = {
   match_status?: string | null;
 };
 
+type CompanyAccess = {
+  companyId: string | null;
+  role: CompanyRole;
+  userIds: string[];
+};
+
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -61,10 +68,13 @@ function formatCurrency(value: number) {
 
 function getBarPercent(value: number, maxValue: number) {
   if (maxValue <= 0) return 0;
+  if (value <= 0) return 0;
   return Math.max(4, Math.round((value / maxValue) * 100));
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
+
   const [loading, setLoading] = useState(true);
   const [workingSampleData, setWorkingSampleData] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -81,144 +91,239 @@ export default function DashboardPage() {
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [transactions, setTransactions] = useState<PlaidTransaction[]>([]);
 
-async function getCompanyAccess(currentUserId: string) {
-  const { data: memberships, error: membershipError } = await supabase
-    .from("company_members")
-    .select("company_id, role")
-    .eq("user_id", currentUserId)
-    .limit(1);
-
-  if (membershipError) {
-    throw new Error(membershipError.message);
+  function clearDashboardState() {
+    setCompanyId(null);
+    setCompanyRole(null);
+    setCompanyUserIds([]);
+    setExpenses([]);
+    setIncome([]);
+    setPayments([]);
+    setInvoices([]);
+    setEstimates([]);
+    setTransactions([]);
   }
 
-  const membership = memberships?.[0];
+  async function getCompanyAccess(currentUserId: string): Promise<CompanyAccess> {
+    const { data: memberships, error: membershipError } = await supabase
+      .from("company_members")
+      .select("company_id, role")
+      .eq("user_id", currentUserId)
+      .limit(1);
 
-  if (!membership?.company_id) {
+    if (membershipError) {
+      throw new Error(`Error loading company access: ${membershipError.message}`);
+    }
+
+    const membership = memberships?.[0];
+
+    if (!membership?.company_id) {
+      return {
+        companyId: null,
+        role: "owner",
+        userIds: [currentUserId],
+      };
+    }
+
+    const { data: members, error: membersError } = await supabase
+      .from("company_members")
+      .select("user_id")
+      .eq("company_id", membership.company_id);
+
+    if (membersError) {
+      throw new Error(`Error loading company members: ${membersError.message}`);
+    }
+
+    const userIds =
+      members?.map((member) => member.user_id).filter(Boolean) || [];
+
     return {
-      companyId: null,
-      role: "owner" as CompanyRole,
-      userIds: [currentUserId],
+      companyId: membership.company_id as string,
+      role: (membership.role || "owner") as CompanyRole,
+      userIds: userIds.length > 0 ? userIds : [currentUserId],
     };
   }
 
-  const { data: members, error: membersError } = await supabase
-    .from("company_members")
-    .select("user_id")
-    .eq("company_id", membership.company_id);
+  async function loadDashboard(currentUserId: string) {
+    const access = await getCompanyAccess(currentUserId);
 
-  if (membersError) {
-    throw new Error(membersError.message);
+    setCompanyId(access.companyId);
+    setCompanyRole(access.role);
+    setCompanyUserIds(access.userIds);
+
+    const [
+      expensesResult,
+      incomeResult,
+      paymentsResult,
+      invoicesResult,
+      estimatesResult,
+      transactionsResult,
+    ] = await Promise.all([
+      supabase
+        .from("expenses")
+        .select("id, amount, category")
+        .in("user_id", access.userIds),
+
+      supabase
+        .from("income")
+        .select("id, amount, match_status")
+        .in("user_id", access.userIds),
+
+      supabase
+        .from("payments")
+        .select("id, amount, match_status")
+        .in("user_id", access.userIds),
+
+      supabase
+        .from("invoices")
+        .select("id, amount, status")
+        .in("user_id", access.userIds),
+
+      supabase
+        .from("estimates")
+        .select("id, amount, status")
+        .in("user_id", access.userIds),
+
+      supabase
+        .from("plaid_transactions")
+        .select(
+          "id, amount, imported_to_expenses, imported_to_income, ignored, match_status"
+        )
+        .in("user_id", access.userIds),
+    ]);
+
+    if (expensesResult.error) {
+      throw new Error(`Error loading expenses: ${expensesResult.error.message}`);
+    }
+
+    if (incomeResult.error) {
+      throw new Error(`Error loading income: ${incomeResult.error.message}`);
+    }
+
+    if (paymentsResult.error) {
+      throw new Error(`Error loading payments: ${paymentsResult.error.message}`);
+    }
+
+    if (invoicesResult.error) {
+      throw new Error(`Error loading invoices: ${invoicesResult.error.message}`);
+    }
+
+    if (estimatesResult.error) {
+      throw new Error(`Error loading estimates: ${estimatesResult.error.message}`);
+    }
+
+    if (transactionsResult.error) {
+      throw new Error(
+        `Error loading bank transactions: ${transactionsResult.error.message}`
+      );
+    }
+
+    setExpenses((expensesResult.data || []) as Expense[]);
+    setIncome((incomeResult.data || []) as Income[]);
+    setPayments((paymentsResult.data || []) as Payment[]);
+    setInvoices((invoicesResult.data || []) as Invoice[]);
+    setEstimates((estimatesResult.data || []) as Estimate[]);
+    setTransactions((transactionsResult.data || []) as PlaidTransaction[]);
   }
 
-  const userIds =
-    members?.map((member) => member.user_id).filter(Boolean) || [currentUserId];
+  async function refreshDashboard(currentUserId?: string) {
+    const userId = currentUserId || user?.id;
 
-  return {
-    companyId: membership.company_id as string,
-    role: (membership.role || "owner") as CompanyRole,
-    userIds,
-  };
-}
+    if (!userId) {
+      clearDashboardState();
+      return;
+    }
 
-  async function loadDashboard(currentUserId: string) {
     try {
-      const access = await getCompanyAccess(currentUserId);
-
-      setCompanyId(access.companyId);
-      setCompanyRole(access.role);
-      setCompanyUserIds(access.userIds);
-
-      const [
-        { data: expensesData, error: expensesError },
-        { data: incomeData, error: incomeError },
-        { data: paymentsData, error: paymentsError },
-        { data: invoicesData, error: invoicesError },
-        { data: estimatesData, error: estimatesError },
-        { data: transactionsData, error: transactionsError },
-      ] = await Promise.all([
-        supabase
-          .from("expenses")
-          .select("id, amount, category")
-          .in("user_id", access.userIds),
-
-        supabase
-          .from("income")
-          .select("id, amount, match_status")
-          .in("user_id", access.userIds),
-
-        supabase
-          .from("payments")
-          .select("id, amount, match_status")
-          .in("user_id", access.userIds),
-
-        supabase
-          .from("invoices")
-          .select("id, amount, status")
-          .in("user_id", access.userIds),
-
-        supabase
-          .from("estimates")
-          .select("id, amount, status")
-          .in("user_id", access.userIds),
-
-        supabase
-          .from("plaid_transactions")
-          .select(
-            "id, amount, imported_to_expenses, imported_to_income, ignored, match_status"
-          )
-          .in("user_id", access.userIds),
-      ]);
-
-      if (expensesError) throw new Error(`Error loading expenses: ${expensesError.message}`);
-      if (incomeError) throw new Error(`Error loading income: ${incomeError.message}`);
-      if (paymentsError) throw new Error(`Error loading payments: ${paymentsError.message}`);
-      if (invoicesError) throw new Error(`Error loading invoices: ${invoicesError.message}`);
-      if (estimatesError) throw new Error(`Error loading estimates: ${estimatesError.message}`);
-      if (transactionsError) throw new Error(`Error loading bank transactions: ${transactionsError.message}`);
-
-      setExpenses((expensesData || []) as Expense[]);
-      setIncome((incomeData || []) as Income[]);
-      setPayments((paymentsData || []) as Payment[]);
-      setInvoices((invoicesData || []) as Invoice[]);
-      setEstimates((estimatesData || []) as Estimate[]);
-      setTransactions((transactionsData || []) as PlaidTransaction[]);
+      setMessage("");
+      await loadDashboard(userId);
     } catch (err) {
       const error = err as Error;
-      setMessage(error.message);
+      setMessage(error.message || "Something went wrong loading the dashboard.");
     }
   }
 
   useEffect(() => {
-    async function loadUser() {
-      const {
-        data: { user: authUser },
-        error,
-      } = await supabase.auth.getUser();
+    let isMounted = true;
 
-      if (error) {
-        setMessage(error.message);
+    async function loadInitialDashboard() {
+      setLoading(true);
+      setMessage("");
+
+      try {
+        const {
+          data: { user: authUser },
+          error,
+        } = await supabase.auth.getUser();
+
+        if (error) {
+          throw new Error(error.message);
+        }
+
+        if (!isMounted) return;
+
+        const safeUser = authUser
+          ? {
+              id: authUser.id,
+              email: authUser.email ?? null,
+            }
+          : null;
+
+        setUser(safeUser);
+
+        if (safeUser) {
+          await loadDashboard(safeUser.id);
+        } else {
+          clearDashboardState();
+        }
+      } catch (err) {
+        const error = err as Error;
+
+        if (isMounted) {
+          setMessage(error.message || "Unable to load dashboard.");
+          clearDashboardState();
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadInitialDashboard();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const nextUser = session?.user
+        ? {
+            id: session.user.id,
+            email: session.user.email ?? null,
+          }
+        : null;
+
+      setUser(nextUser);
+
+      if (!nextUser) {
+        clearDashboardState();
         setLoading(false);
         return;
       }
 
-      const safeUser = authUser
-        ? {
-            id: authUser.id,
-            email: authUser.email ?? null,
-          }
-        : null;
-
-      setUser(safeUser);
-
-      if (safeUser) {
-        await loadDashboard(safeUser.id);
+      try {
+        setMessage("");
+        await loadDashboard(nextUser.id);
+      } catch (err) {
+        const error = err as Error;
+        setMessage(error.message || "Unable to refresh dashboard.");
+      } finally {
+        setLoading(false);
       }
+    });
 
-      setLoading(false);
-    }
-
-    loadUser();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   async function handleAddSampleData() {
@@ -227,70 +332,69 @@ async function getCompanyAccess(currentUserId: string) {
     setWorkingSampleData(true);
     setMessage("");
 
-    const sampleInvoices = [
-      { user_id: user.id, amount: 4200, status: "paid" },
-      { user_id: user.id, amount: 5800, status: "paid" },
-      { user_id: user.id, amount: 5000, status: "paid" },
-    ];
+    try {
+      const sampleInvoices = [
+        { user_id: user.id, amount: 4200, status: "paid" },
+        { user_id: user.id, amount: 5800, status: "paid" },
+        { user_id: user.id, amount: 5000, status: "paid" },
+      ];
 
-    const sampleExpenses = [
-      { user_id: user.id, amount: 1250, category: "Materials" },
-      { user_id: user.id, amount: 950, category: "Materials" },
-      { user_id: user.id, amount: 725, category: "Fuel" },
-      { user_id: user.id, amount: 680, category: "Tools" },
-      { user_id: user.id, amount: 540, category: "Dump Fees" },
-      { user_id: user.id, amount: 825, category: "Labor" },
-      { user_id: user.id, amount: 610, category: "Supplies" },
-      { user_id: user.id, amount: 500, category: "Equipment Rental" },
-      { user_id: user.id, amount: 470, category: "Permits" },
-      { user_id: user.id, amount: 450, category: "Insurance" },
-    ];
+      const sampleExpenses = [
+        { user_id: user.id, amount: 1250, category: "Materials" },
+        { user_id: user.id, amount: 950, category: "Materials" },
+        { user_id: user.id, amount: 725, category: "Fuel" },
+        { user_id: user.id, amount: 680, category: "Tools" },
+        { user_id: user.id, amount: 540, category: "Dump Fees" },
+        { user_id: user.id, amount: 825, category: "Labor" },
+        { user_id: user.id, amount: 610, category: "Supplies" },
+        { user_id: user.id, amount: 500, category: "Equipment Rental" },
+        { user_id: user.id, amount: 470, category: "Permits" },
+        { user_id: user.id, amount: 450, category: "Insurance" },
+      ];
 
-    const { data: createdInvoices, error: invoiceError } = await supabase
-      .from("invoices")
-      .insert(sampleInvoices)
-      .select("id, amount");
+      const { data: createdInvoices, error: invoiceError } = await supabase
+        .from("invoices")
+        .insert(sampleInvoices)
+        .select("id, amount");
 
-    if (invoiceError) {
-      setMessage(`Error adding sample invoices: ${invoiceError.message}`);
+      if (invoiceError) {
+        throw new Error(`Error adding sample invoices: ${invoiceError.message}`);
+      }
+
+      const samplePayments = (createdInvoices || []).map((invoice) => ({
+        user_id: user.id,
+        invoice_id: invoice.id,
+        amount: invoice.amount,
+        match_status: "matched",
+      }));
+
+      const { error: paymentError } = await supabase
+        .from("payments")
+        .insert(samplePayments);
+
+      if (paymentError) {
+        throw new Error(`Error adding sample payments: ${paymentError.message}`);
+      }
+
+      const { error: expenseError } = await supabase
+        .from("expenses")
+        .insert(sampleExpenses);
+
+      if (expenseError) {
+        throw new Error(`Error adding sample expenses: ${expenseError.message}`);
+      }
+
+      await refreshDashboard(user.id);
+
+      setMessage(
+        "Sample data added. Revenue: $15,000. Expenses: $7,000. Profit: $8,000."
+      );
+    } catch (err) {
+      const error = err as Error;
+      setMessage(error.message || "Unable to add sample data.");
+    } finally {
       setWorkingSampleData(false);
-      return;
     }
-
-    const samplePayments = (createdInvoices || []).map((invoice) => ({
-      user_id: user.id,
-      invoice_id: invoice.id,
-      amount: invoice.amount,
-      match_status: "matched",
-    }));
-
-    const { error: paymentError } = await supabase
-      .from("payments")
-      .insert(samplePayments);
-
-    if (paymentError) {
-      setMessage(`Error adding sample payments: ${paymentError.message}`);
-      setWorkingSampleData(false);
-      return;
-    }
-
-    const { error: expenseError } = await supabase
-      .from("expenses")
-      .insert(sampleExpenses);
-
-    if (expenseError) {
-      setMessage(`Error adding sample expenses: ${expenseError.message}`);
-      setWorkingSampleData(false);
-      return;
-    }
-
-    await loadDashboard(user.id);
-
-    setMessage(
-      "Sample data added. Revenue: $15,000. Expenses: $7,000. Profit: $8,000."
-    );
-
-    setWorkingSampleData(false);
   }
 
   async function handleClearSampleData() {
@@ -299,54 +403,63 @@ async function getCompanyAccess(currentUserId: string) {
     setWorkingSampleData(true);
     setMessage("");
 
-    const { error: paymentError } = await supabase
-      .from("payments")
-      .delete()
-      .eq("user_id", user.id);
+    try {
+      const { error: paymentError } = await supabase
+        .from("payments")
+        .delete()
+        .eq("user_id", user.id);
 
-    if (paymentError) {
-      setMessage(`Error clearing payments: ${paymentError.message}`);
+      if (paymentError) {
+        throw new Error(`Error clearing payments: ${paymentError.message}`);
+      }
+
+      const { error: expenseError } = await supabase
+        .from("expenses")
+        .delete()
+        .eq("user_id", user.id);
+
+      if (expenseError) {
+        throw new Error(`Error clearing expenses: ${expenseError.message}`);
+      }
+
+      const { error: invoiceError } = await supabase
+        .from("invoices")
+        .delete()
+        .eq("user_id", user.id);
+
+      if (invoiceError) {
+        throw new Error(`Error clearing invoices: ${invoiceError.message}`);
+      }
+
+      await refreshDashboard(user.id);
+
+      setMessage("Sample data cleared. Fresh start.");
+    } catch (err) {
+      const error = err as Error;
+      setMessage(error.message || "Unable to clear sample data.");
+    } finally {
       setWorkingSampleData(false);
-      return;
     }
-
-    const { error: expenseError } = await supabase
-      .from("expenses")
-      .delete()
-      .eq("user_id", user.id);
-
-    if (expenseError) {
-      setMessage(`Error clearing expenses: ${expenseError.message}`);
-      setWorkingSampleData(false);
-      return;
-    }
-
-    const { error: invoiceError } = await supabase
-      .from("invoices")
-      .delete()
-      .eq("user_id", user.id);
-
-    if (invoiceError) {
-      setMessage(`Error clearing invoices: ${invoiceError.message}`);
-      setWorkingSampleData(false);
-      return;
-    }
-
-    await loadDashboard(user.id);
-
-    setMessage("Sample data cleared. Fresh start — no shame, we all need a reset.");
-    setWorkingSampleData(false);
   }
 
   async function handleSignOut() {
-    const { error } = await supabase.auth.signOut();
+    setMessage("");
 
-    if (error) {
+    try {
+      const { error } = await supabase.auth.signOut();
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      setUser(null);
+      clearDashboardState();
+      router.push("/");
+      router.refresh();
+    } catch (err) {
+      const error = err as Error;
       setMessage(`Sign out error: ${error.message}`);
-      return;
     }
-
-    setUser(null);
   }
 
   const totals = useMemo(() => {
@@ -448,6 +561,10 @@ async function getCompanyAccess(currentUserId: string) {
       <main className="min-h-screen bg-slate-100 p-8">
         <div className="mx-auto max-w-md rounded-2xl bg-white p-8 shadow">
           <p className="text-slate-900">Loading dashboard...</p>
+          <p className="mt-2 text-sm text-slate-600">
+            If this hangs, refresh once. This page now has safer loading
+            fallbacks.
+          </p>
         </div>
       </main>
     );
@@ -461,6 +578,15 @@ async function getCompanyAccess(currentUserId: string) {
           <p className="mt-3 text-slate-700">
             Please sign in to view your dashboard.
           </p>
+          <a
+            href="/auth"
+            className="mt-5 inline-block rounded-xl bg-slate-950 px-4 py-2 font-semibold text-white"
+          >
+            Sign in
+          </a>
+          {message && (
+            <p className="mt-4 text-sm font-semibold text-red-700">{message}</p>
+          )}
         </div>
       </main>
     );
@@ -477,7 +603,8 @@ async function getCompanyAccess(currentUserId: string) {
         {companyRole && companyRole !== "owner" && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
             <p className="text-sm font-semibold text-slate-900">
-              You’re viewing this company as a {companyRole}. Billing and owner-only tools are hidden.
+              You’re viewing this company as a {companyRole}. Billing and
+              owner-only tools are hidden.
             </p>
           </section>
         )}
@@ -499,7 +626,7 @@ async function getCompanyAccess(currentUserId: string) {
                 <p className="mt-2 max-w-2xl text-sm font-medium text-slate-300">
                   {hasFullSampleStyleData
                     ? "The sample numbers show how TrueAngle works. Now add a real expense or create a real invoice so you can see what your jobs are actually making."
-                    : "Add sample invoices, payments, and expenses so the dashboard actually shows how TrueAngle works. Clear it when you’re ready to run your real business through it."}
+                    : "Add sample invoices, payments, and expenses so the dashboard shows how TrueAngle works. Clear it when you’re ready to run your real business through it."}
                 </p>
               </div>
 
@@ -515,14 +642,14 @@ async function getCompanyAccess(currentUserId: string) {
                 ) : (
                   <>
                     <a
-                      href="/dashboard/expenses"
+                      href="/expenses"
                       className="rounded-xl bg-white px-5 py-3 text-center text-sm font-black text-slate-950 transition hover:bg-slate-200"
                     >
                       Add Real Expense
                     </a>
 
                     <a
-                      href="/dashboard/invoices"
+                      href="/invoices"
                       className="rounded-xl bg-white px-5 py-3 text-center text-sm font-black text-slate-950 transition hover:bg-slate-200"
                     >
                       Create Real Invoice
@@ -556,6 +683,11 @@ async function getCompanyAccess(currentUserId: string) {
           {companyId && (
             <p className="mt-3 text-xs font-semibold text-slate-500">
               Company access active.
+            </p>
+          )}
+          {companyUserIds.length > 1 && (
+            <p className="mt-1 text-xs font-semibold text-slate-500">
+              Showing company data across {companyUserIds.length} users.
             </p>
           )}
         </section>
