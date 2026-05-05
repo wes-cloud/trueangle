@@ -36,6 +36,8 @@ function formatStatus(status: string | null) {
       return "Approved";
     case "converted":
       return "Converted";
+    case "declined":
+      return "Declined";
     case "draft":
     default:
       return "Draft";
@@ -50,6 +52,8 @@ function getStatusColor(status: string | null) {
       return "bg-blue-100 text-blue-800";
     case "converted":
       return "bg-green-100 text-green-800";
+    case "declined":
+      return "bg-red-100 text-red-800";
     default:
       return "bg-gray-100 text-gray-800";
   }
@@ -58,19 +62,30 @@ function getStatusColor(status: string | null) {
 export default function EstimatesPage() {
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function loadEstimates() {
+  async function loadEstimates() {
+    setLoading(true);
+    setMessage("");
+
+    try {
       const {
         data: { user },
+        error: userError,
       } = await supabase.auth.getUser();
 
+      if (userError) {
+        throw new Error(userError.message);
+      }
+
       if (!user) {
+        setEstimates([]);
         setLoading(false);
         return;
       }
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("estimates")
         .select(
           "id, customer_name, job_name, estimate_number, amount, created_at, status, converted_invoice_id"
@@ -78,19 +93,84 @@ export default function EstimatesPage() {
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
+      if (error) {
+        throw new Error(error.message);
+      }
+
       setEstimates((data || []) as Estimate[]);
+    } catch (err) {
+      const error = err as Error;
+      setMessage(error.message || "Unable to load estimates.");
+    } finally {
       setLoading(false);
     }
+  }
 
+  useEffect(() => {
     loadEstimates();
   }, []);
+
+  async function handleDeleteEstimate(estimate: Estimate) {
+    const confirmed = window.confirm(
+      `Delete this estimate?\n\n${
+        estimate.job_name || estimate.customer_name || "Untitled estimate"
+      }\n\nThis will delete the estimate and its line items. It will not delete any invoice that was already created.`
+    );
+
+    if (!confirmed) return;
+
+    setDeletingId(estimate.id);
+    setMessage("");
+
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) {
+        throw new Error(userError.message);
+      }
+
+      if (!user) {
+        throw new Error("You must be signed in.");
+      }
+
+      const { error: lineItemsError } = await supabase
+        .from("line_items")
+        .delete()
+        .eq("estimate_id", estimate.id);
+
+      if (lineItemsError) {
+        throw new Error(`Error deleting line items: ${lineItemsError.message}`);
+      }
+
+      const { error: estimateError } = await supabase
+        .from("estimates")
+        .delete()
+        .eq("id", estimate.id)
+        .eq("user_id", user.id);
+
+      if (estimateError) {
+        throw new Error(`Error deleting estimate: ${estimateError.message}`);
+      }
+
+      setMessage("Estimate deleted.");
+      await loadEstimates();
+    } catch (err) {
+      const error = err as Error;
+      setMessage(error.message || "Unable to delete estimate.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   if (loading) {
     return (
       <main className="min-h-screen bg-gray-100 p-6 text-gray-900">
         <AppNav />
         <div className="mx-auto max-w-5xl rounded-2xl bg-white p-6 shadow">
-          <p>Loading...</p>
+          <p>Loading estimates...</p>
         </div>
       </main>
     );
@@ -102,7 +182,12 @@ export default function EstimatesPage() {
 
       <div className="mx-auto max-w-5xl space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold text-gray-900">Estimates</h1>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Estimates</h1>
+            <p className="mt-1 text-sm text-gray-600">
+              Track estimates from draft to client approval to invoice.
+            </p>
+          </div>
 
           <Link
             href="/estimates/new"
@@ -111,6 +196,12 @@ export default function EstimatesPage() {
             + New Estimate
           </Link>
         </div>
+
+        {message && (
+          <div className="rounded-xl bg-white p-4 text-sm font-semibold text-gray-900 shadow">
+            {message}
+          </div>
+        )}
 
         {estimates.length === 0 ? (
           <div className="rounded-xl bg-white p-6 shadow">
@@ -122,10 +213,7 @@ export default function EstimatesPage() {
               const isConverted = !!estimate.converted_invoice_id;
 
               return (
-                <div
-                  key={estimate.id}
-                  className="rounded-xl bg-white p-5 shadow"
-                >
+                <div key={estimate.id} className="rounded-xl bg-white p-5 shadow">
                   <div className="flex flex-wrap items-center justify-between gap-4">
                     <div>
                       <p className="text-lg font-bold text-gray-900">
@@ -163,7 +251,7 @@ export default function EstimatesPage() {
 
                     <div className="text-right">
                       <p className="text-xl font-semibold text-gray-900">
-                        {formatCurrency(Number(estimate.amount))}
+                        {formatCurrency(Number(estimate.amount || 0))}
                       </p>
                     </div>
                   </div>
@@ -191,6 +279,15 @@ export default function EstimatesPage() {
                         View Invoice
                       </Link>
                     )}
+
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteEstimate(estimate)}
+                      disabled={deletingId === estimate.id}
+                      className="rounded bg-red-600 px-3 py-1 text-white disabled:opacity-50"
+                    >
+                      {deletingId === estimate.id ? "Deleting..." : "Delete"}
+                    </button>
                   </div>
                 </div>
               );
