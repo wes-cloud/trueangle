@@ -88,12 +88,15 @@ export default function AppNav({ onSignOut }: AppNavProps) {
     return items.some((item) => isActive(item.href));
   }
 
-  async function handleSignOutClick() {
-    if (onSignOut) {
-      await onSignOut();
-    } else {
-      await supabase.auth.signOut();
-    }
+async function handleSignOutClick() {
+  if (onSignOut) {
+    await onSignOut();
+  } else {
+    await supabase.auth.signOut();
+  }
+
+  window.location.href = "/";
+
 
     router.push("/");
     router.refresh();
