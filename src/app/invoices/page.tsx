@@ -77,33 +77,46 @@ function buildInvoiceNumber() {
 }
 
 function formatStatus(status: string | null) {
-  if (!status) return "Draft";
-
   switch (status) {
-    case "draft":
-      return "Draft";
     case "sent":
       return "Sent";
     case "paid":
       return "Paid";
     case "partial":
       return "Partial";
+    case "overdue":
+      return "Overdue";
+    case "draft":
     default:
-      return status.charAt(0).toUpperCase() + status.slice(1);
+      return "Draft";
   }
 }
 
-function getStatusColor(status: string | null) {
+function getStatusClass(status: string | null) {
   switch (status) {
     case "sent":
-      return "bg-yellow-100 text-yellow-800";
+      return "bg-yellow-100 text-yellow-900 ring-yellow-200";
     case "paid":
-      return "bg-green-100 text-green-800";
+      return "bg-green-100 text-green-900 ring-green-200";
     case "partial":
-      return "bg-blue-100 text-blue-800";
+      return "bg-blue-100 text-blue-900 ring-blue-200";
+    case "overdue":
+      return "bg-red-100 text-red-900 ring-red-200";
     default:
-      return "bg-gray-100 text-gray-800";
+      return "bg-gray-100 text-gray-800 ring-gray-200";
   }
+}
+
+function isPastDue(invoice: Invoice) {
+  if (!invoice.due_date || invoice.status === "paid") return false;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const due = new Date(invoice.due_date);
+  due.setHours(0, 0, 0, 0);
+
+  return due < today;
 }
 
 export default function InvoicesPage() {
@@ -217,6 +230,13 @@ export default function InvoicesPage() {
     ]);
   }
 
+  function resetPaymentForm() {
+    setPaymentAmount("");
+    setPaymentDate("");
+    setPaymentMethod("");
+    setPaymentNotes("");
+  }
+
   function resetForm() {
     setInvoiceNumber(buildInvoiceNumber());
     setTitle("");
@@ -232,13 +252,6 @@ export default function InvoicesPage() {
     resetPaymentForm();
   }
 
-  function resetPaymentForm() {
-    setPaymentAmount("");
-    setPaymentDate("");
-    setPaymentMethod("");
-    setPaymentNotes("");
-  }
-
   function loadInvoiceIntoForm(invoice: Invoice) {
     setInvoiceNumber(invoice.invoice_number || buildInvoiceNumber());
     setTitle(invoice.title || "");
@@ -251,6 +264,24 @@ export default function InvoicesPage() {
     setSelectedCustomerId(invoice.customer_id || "");
     setSelectedEstimateId(invoice.estimate_id || "");
     setEditingId(invoice.id);
+  }
+
+  function getInvoicePayments(invoiceId: string) {
+    return payments.filter((payment) => payment.invoice_id === invoiceId);
+  }
+
+  function getInvoicePaidTotal(invoiceId: string) {
+    return getInvoicePayments(invoiceId).reduce(
+      (sum, payment) => sum + Number(payment.amount || 0),
+      0
+    );
+  }
+
+  function getInvoiceBalance(invoice: Invoice) {
+    return Math.max(
+      Number(invoice.amount || 0) - getInvoicePaidTotal(invoice.id),
+      0
+    );
   }
 
   function handleEstimateChange(nextEstimateId: string) {
@@ -301,7 +332,7 @@ export default function InvoicesPage() {
       resetForm();
     }
 
-    setMessage("Invoice deleted successfully.");
+    setMessage("Invoice deleted.");
     await loadPageData(user.id);
   }
 
@@ -352,7 +383,7 @@ export default function InvoicesPage() {
         return;
       }
 
-      setMessage("Invoice updated successfully.");
+      setMessage("Invoice updated.");
       await loadPageData(user.id);
       return;
     }
@@ -371,26 +402,87 @@ export default function InvoicesPage() {
       return;
     }
 
-    setMessage("Invoice saved successfully.");
+    setMessage("Invoice saved.");
     resetForm();
     await loadPageData(user.id);
+  }
+
+  async function setInvoiceStatus(invoiceId: string, nextStatus: string) {
+    if (!user) {
+      setMessage("You must be signed in.");
+      return;
+    }
+
+    const updatePayload: Record<string, string | null> = {
+      status: nextStatus,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (nextStatus === "sent") {
+      updatePayload.issue_date = new Date().toISOString().slice(0, 10);
+    }
+
+    const { error } = await supabase
+      .from("invoices")
+      .update(updatePayload)
+      .eq("id", invoiceId)
+      .eq("user_id", user.id);
+
+    if (error) {
+      setMessage(`Error updating invoice status: ${error.message}`);
+      return;
+    }
+
+    if (editingId === invoiceId) {
+      setStatus(nextStatus);
+    }
+
+    setMessage(`Invoice marked ${formatStatus(nextStatus)}.`);
+    await loadPageData(user.id);
+  }
+
+  async function markInvoicePaid(invoice: Invoice) {
+    if (!user) {
+      setMessage("You must be signed in.");
+      return;
+    }
+
+    const balance = getInvoiceBalance(invoice);
+
+    if (balance > 0) {
+      const { error: paymentError } = await supabase.from("payments").insert([
+        {
+          user_id: user.id,
+          invoice_id: invoice.id,
+          amount: balance,
+          payment_date: new Date().toISOString().slice(0, 10),
+          payment_method: "Manual",
+          notes: "Marked paid from invoice page.",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ]);
+
+      if (paymentError) {
+        setMessage(`Error recording payment: ${paymentError.message}`);
+        return;
+      }
+    }
+
+    await setInvoiceStatus(invoice.id, "paid");
   }
 
   async function updateInvoicePaymentStatus(invoiceId: string) {
     const invoice = invoices.find((item) => item.id === invoiceId);
     if (!invoice) return;
 
-    const relatedPayments = payments.filter((item) => item.invoice_id === invoiceId);
-    const totalPaid = relatedPayments.reduce(
-      (sum, item) => sum + Number(item.amount || 0),
-      0
-    );
+    const totalPaid = getInvoicePaidTotal(invoiceId);
     const invoiceAmount = Number(invoice.amount || 0);
 
-    let nextStatus = "draft";
+    let nextStatus = "sent";
 
     if (totalPaid <= 0) {
-      nextStatus = "sent";
+      nextStatus = invoice.status === "draft" ? "draft" : "sent";
     } else if (totalPaid < invoiceAmount) {
       nextStatus = "partial";
     } else {
@@ -431,7 +523,7 @@ export default function InvoicesPage() {
         user_id: user.id,
         invoice_id: editingId,
         amount: Number(paymentAmount),
-        payment_date: paymentDate || null,
+        payment_date: paymentDate || new Date().toISOString().slice(0, 10),
         payment_method: paymentMethod.trim() || null,
         notes: paymentNotes.trim() || null,
         created_at: new Date().toISOString(),
@@ -448,7 +540,7 @@ export default function InvoicesPage() {
     await loadPageData(user.id);
     await updateInvoicePaymentStatus(editingId);
     await loadPageData(user.id);
-    setMessage("Payment added successfully.");
+    setMessage("Payment added.");
   }
 
   async function handleDeletePayment(paymentId: string) {
@@ -477,7 +569,7 @@ export default function InvoicesPage() {
       await loadPageData(user.id);
     }
 
-    setMessage("Payment deleted successfully.");
+    setMessage("Payment deleted.");
   }
 
   async function handleSignOut() {
@@ -495,10 +587,6 @@ export default function InvoicesPage() {
     setPayments([]);
     setMessage("Signed out.");
   }
-
-  const totalInvoices = useMemo(() => {
-    return invoices.reduce((sum, invoice) => sum + Number(invoice.amount || 0), 0);
-  }, [invoices]);
 
   const selectedEstimateLabel = useMemo(() => {
     if (!selectedEstimateId) return "";
@@ -520,7 +608,38 @@ export default function InvoicesPage() {
   }, [currentInvoicePayments]);
 
   const currentInvoiceAmount = Number(amount || 0);
-  const currentBalanceDue = Math.max(currentInvoiceAmount - currentInvoiceTotalPaid, 0);
+  const currentBalanceDue = Math.max(
+    currentInvoiceAmount - currentInvoiceTotalPaid,
+    0
+  );
+
+  const invoiceStats = useMemo(() => {
+    const totalInvoiced = invoices.reduce(
+      (sum, invoice) => sum + Number(invoice.amount || 0),
+      0
+    );
+
+    const totalPaid = payments.reduce(
+      (sum, payment) => sum + Number(payment.amount || 0),
+      0
+    );
+
+    const outstanding = invoices.reduce((sum, invoice) => {
+      return sum + getInvoiceBalance(invoice);
+    }, 0);
+
+    const overdue = invoices.reduce((sum, invoice) => {
+      if (!isPastDue(invoice)) return sum;
+      return sum + getInvoiceBalance(invoice);
+    }, 0);
+
+    return {
+      totalInvoiced,
+      totalPaid,
+      outstanding,
+      overdue,
+    };
+  }, [invoices, payments]);
 
   useEffect(() => {
     async function loadUser() {
@@ -621,7 +740,7 @@ export default function InvoicesPage() {
     if (!existingInvoice) return;
 
     loadInvoiceIntoForm(existingInvoice);
-    setMessage("Opened existing invoice.");
+    setMessage("Opened invoice.");
   }, [initialInvoiceId, invoices]);
 
   if (authLoading) {
@@ -652,15 +771,25 @@ export default function InvoicesPage() {
       <AppNav onSignOut={handleSignOut} />
 
       <div className="mx-auto max-w-6xl space-y-8">
-        <div className="rounded-2xl bg-white p-8 shadow">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
+          <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Invoices</h1>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+                Money
+              </p>
+              <h1 className="mt-2 text-3xl font-bold text-gray-900">
+                Invoices
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm text-gray-600">
+                Track what has been billed, what has been paid, and what still
+                needs to be collected.
+              </p>
+              <p className="mt-1 text-sm text-gray-500">
                 Signed in as {user.email || "User"}
               </p>
+
               {selectedEstimateLabel && (
-                <p className="mt-2 text-sm font-medium text-blue-700">
+                <p className="mt-3 rounded-xl bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800">
                   {editingId
                     ? `Editing invoice for: ${selectedEstimateLabel}`
                     : `Creating invoice for: ${selectedEstimateLabel}`}
@@ -668,20 +797,33 @@ export default function InvoicesPage() {
               )}
             </div>
 
-            <div className="rounded-xl bg-gray-50 px-4 py-3">
-              <p className="text-sm text-gray-500">Total Invoiced</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {formatCurrency(totalInvoices)}
+            <button
+              type="button"
+              onClick={resetForm}
+              className="rounded-xl bg-black px-4 py-2 font-semibold text-white"
+            >
+              New Invoice
+            </button>
+          </div>
+
+          <div className="mt-6 grid gap-4 md:grid-cols-4">
+            <StatCard label="Total Invoiced" value={formatCurrency(invoiceStats.totalInvoiced)} />
+            <StatCard label="Paid" value={formatCurrency(invoiceStats.totalPaid)} />
+            <StatCard label="Outstanding" value={formatCurrency(invoiceStats.outstanding)} />
+            <StatCard label="Overdue" value={formatCurrency(invoiceStats.overdue)} danger={invoiceStats.overdue > 0} />
+          </div>
+        </section>
+
+        <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">
+                {editingId ? "Edit Invoice" : "Create Invoice"}
+              </h2>
+              <p className="mt-1 text-sm text-gray-600">
+                Draft it, send it, then record payments as they come in.
               </p>
             </div>
-          </div>
-        </div>
-
-        <div className="rounded-2xl bg-white p-8 shadow">
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-2xl font-bold text-gray-900">
-              {editingId ? "Edit Invoice" : "Create Invoice"}
-            </h2>
 
             <div className="flex gap-2">
               {currentPrintId && (
@@ -689,7 +831,7 @@ export default function InvoicesPage() {
                   href={`/invoices/${currentPrintId}/print`}
                   target="_blank"
                   rel="noreferrer"
-                  className="rounded bg-black px-4 py-2 text-white"
+                  className="rounded-xl bg-black px-4 py-2 text-white"
                 >
                   Print
                 </a>
@@ -699,9 +841,9 @@ export default function InvoicesPage() {
                 <button
                   type="button"
                   onClick={resetForm}
-                  className="rounded border border-gray-300 px-4 py-2 text-gray-900"
+                  className="rounded-xl border border-gray-300 px-4 py-2 text-gray-900"
                 >
-                  Switch to New Invoice
+                  Switch to New
                 </button>
               )}
             </div>
@@ -709,10 +851,7 @@ export default function InvoicesPage() {
 
           <form onSubmit={handleSaveInvoice} className="space-y-6">
             <div className="grid gap-4 md:grid-cols-3">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
-                  Invoice Number
-                </label>
+              <Field label="Invoice Number">
                 <input
                   type="text"
                   value={invoiceNumber}
@@ -720,38 +859,29 @@ export default function InvoicesPage() {
                   className="w-full rounded-lg border p-3 text-gray-900"
                   required
                 />
-              </div>
+              </Field>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
-                  Issue Date
-                </label>
+              <Field label="Issue Date">
                 <input
                   type="date"
                   value={issueDate}
                   onChange={(e) => setIssueDate(e.target.value)}
                   className="w-full rounded-lg border p-3 text-gray-900"
                 />
-              </div>
+              </Field>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
-                  Due Date
-                </label>
+              <Field label="Due Date">
                 <input
                   type="date"
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
                   className="w-full rounded-lg border p-3 text-gray-900"
                 />
-              </div>
+              </Field>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
-                  Customer
-                </label>
+              <Field label="Customer">
                 <select
                   value={selectedCustomerId}
                   onChange={(e) => setSelectedCustomerId(e.target.value)}
@@ -764,12 +894,9 @@ export default function InvoicesPage() {
                     </option>
                   ))}
                 </select>
-              </div>
+              </Field>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
-                  Project / Estimate
-                </label>
+              <Field label="Project / Estimate">
                 <select
                   value={selectedEstimateId}
                   onChange={(e) => handleEstimateChange(e.target.value)}
@@ -784,27 +911,23 @@ export default function InvoicesPage() {
                     </option>
                   ))}
                 </select>
-              </div>
+              </Field>
             </div>
 
             <div className="grid gap-4 md:grid-cols-3">
               <div className="md:col-span-2">
-                <label className="mb-1 block text-sm font-medium text-gray-900">
-                  Title
-                </label>
-                <input
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Kitchen Remodel Invoice"
-                  className="w-full rounded-lg border p-3 text-gray-900"
-                />
+                <Field label="Title">
+                  <input
+                    type="text"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Bathroom Remodel Invoice"
+                    className="w-full rounded-lg border p-3 text-gray-900"
+                  />
+                </Field>
               </div>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
-                  Amount
-                </label>
+              <Field label="Amount">
                 <input
                   type="number"
                   step="0.01"
@@ -814,26 +937,20 @@ export default function InvoicesPage() {
                   className="w-full rounded-lg border p-3 text-gray-900"
                   required
                 />
-              </div>
+              </Field>
             </div>
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-900">
-                Description
-              </label>
+            <Field label="Description">
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Invoice description"
                 className="min-h-[100px] w-full rounded-lg border p-3 text-gray-900"
               />
-            </div>
+            </Field>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
-                  Status
-                </label>
+              <Field label="Status">
                 <select
                   value={status}
                   onChange={(e) => setStatus(e.target.value)}
@@ -844,67 +961,67 @@ export default function InvoicesPage() {
                   <option value="partial">Partial</option>
                   <option value="paid">Paid</option>
                 </select>
-              </div>
+              </Field>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
-                  Notes
-                </label>
+              <Field label="Notes">
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   className="min-h-[52px] w-full rounded-lg border p-3 text-gray-900"
                   placeholder="Optional notes"
                 />
-              </div>
+              </Field>
             </div>
 
-            <div className="flex gap-3">
-              <button className="rounded bg-black px-4 py-2 text-white">
+            <div className="flex flex-wrap gap-3">
+              <button className="rounded-xl bg-black px-4 py-2 text-white">
                 {editingId ? "Update Invoice" : "Save Invoice"}
               </button>
+
+              {editingId && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setInvoiceStatus(editingId, "sent")}
+                    className="rounded-xl bg-yellow-600 px-4 py-2 text-white"
+                  >
+                    Mark Sent
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const invoice = invoices.find((item) => item.id === editingId);
+                      if (invoice) markInvoicePaid(invoice);
+                    }}
+                    className="rounded-xl bg-green-600 px-4 py-2 text-white"
+                  >
+                    Mark Paid
+                  </button>
+                </>
+              )}
             </div>
 
             {message && <p className="text-gray-900">{message}</p>}
           </form>
-        </div>
+        </section>
 
         {editingId && (
           <>
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="rounded-2xl bg-white p-5 shadow">
-                <p className="text-sm text-gray-500">Invoice Total</p>
-                <p className="mt-2 text-2xl font-bold text-gray-900">
-                  {formatCurrency(currentInvoiceAmount)}
-                </p>
-              </div>
+            <section className="grid gap-4 md:grid-cols-3">
+              <StatCard label="Invoice Total" value={formatCurrency(currentInvoiceAmount)} />
+              <StatCard label="Total Paid" value={formatCurrency(currentInvoiceTotalPaid)} />
+              <StatCard label="Balance Due" value={formatCurrency(currentBalanceDue)} danger={currentBalanceDue > 0} />
+            </section>
 
-              <div className="rounded-2xl bg-white p-5 shadow">
-                <p className="text-sm text-gray-500">Total Paid</p>
-                <p className="mt-2 text-2xl font-bold text-gray-900">
-                  {formatCurrency(currentInvoiceTotalPaid)}
-                </p>
-              </div>
-
-              <div className="rounded-2xl bg-white p-5 shadow">
-                <p className="text-sm text-gray-500">Balance Due</p>
-                <p className="mt-2 text-2xl font-bold text-gray-900">
-                  {formatCurrency(currentBalanceDue)}
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-2xl bg-white p-8 shadow">
+            <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
               <h2 className="mb-4 text-2xl font-bold text-gray-900">
                 Add Payment
               </h2>
 
               <form onSubmit={handleAddPayment} className="space-y-6">
                 <div className="grid gap-4 md:grid-cols-4">
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-900">
-                      Amount
-                    </label>
+                  <Field label="Amount">
                     <input
                       type="number"
                       step="0.01"
@@ -914,24 +1031,18 @@ export default function InvoicesPage() {
                       placeholder="0.00"
                       required
                     />
-                  </div>
+                  </Field>
 
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-900">
-                      Payment Date
-                    </label>
+                  <Field label="Payment Date">
                     <input
                       type="date"
                       value={paymentDate}
                       onChange={(e) => setPaymentDate(e.target.value)}
                       className="w-full rounded-lg border p-3 text-gray-900"
                     />
-                  </div>
+                  </Field>
 
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-900">
-                      Method
-                    </label>
+                  <Field label="Method">
                     <input
                       type="text"
                       value={paymentMethod}
@@ -939,12 +1050,9 @@ export default function InvoicesPage() {
                       className="w-full rounded-lg border p-3 text-gray-900"
                       placeholder="Cash, Check, Card, ACH"
                     />
-                  </div>
+                  </Field>
 
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-gray-900">
-                      Notes
-                    </label>
+                  <Field label="Notes">
                     <input
                       type="text"
                       value={paymentNotes}
@@ -952,18 +1060,16 @@ export default function InvoicesPage() {
                       className="w-full rounded-lg border p-3 text-gray-900"
                       placeholder="Optional"
                     />
-                  </div>
+                  </Field>
                 </div>
 
-                <div className="flex gap-3">
-                  <button className="rounded bg-green-600 px-4 py-2 text-white">
-                    Add Payment
-                  </button>
-                </div>
+                <button className="rounded-xl bg-green-600 px-4 py-2 text-white">
+                  Add Payment
+                </button>
               </form>
-            </div>
+            </section>
 
-            <div className="rounded-2xl bg-white p-8 shadow">
+            <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
               <h2 className="mb-4 text-2xl font-bold text-gray-900">
                 Payment History
               </h2>
@@ -995,25 +1101,23 @@ export default function InvoicesPage() {
                           )}
                         </div>
 
-                        <div>
-                          <button
-                            type="button"
-                            onClick={() => handleDeletePayment(payment.id)}
-                            className="rounded bg-red-600 px-3 py-1 text-white"
-                          >
-                            Delete
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDeletePayment(payment.id)}
+                          className="rounded-xl bg-red-600 px-3 py-1 text-white"
+                        >
+                          Delete
+                        </button>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
-            </div>
+            </section>
           </>
         )}
 
-        <div className="rounded-2xl bg-white p-8 shadow">
+        <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
           <h2 className="mb-4 text-2xl font-bold text-gray-900">
             Saved Invoices
           </h2>
@@ -1022,82 +1126,180 @@ export default function InvoicesPage() {
             <p className="text-gray-600">No invoices yet.</p>
           ) : (
             <div className="space-y-4">
-              {invoices.map((invoice) => (
-                <div
-                  key={invoice.id}
-                  className="rounded-xl border border-gray-200 p-4"
-                >
-                  <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                    <div>
-                      <p className="text-lg font-bold text-gray-900">
-                        {invoice.invoice_number || "No Invoice Number"}
-                      </p>
-                      <p className="text-sm text-gray-700">
-                        {invoice.title || "No title"}
-                      </p>
+              {invoices.map((invoice) => {
+                const linkedEstimate = estimates.find(
+                  (estimate) => estimate.id === invoice.estimate_id
+                );
+                const linkedCustomer = customers.find(
+                  (customer) => customer.id === invoice.customer_id
+                );
+                const paidTotal = getInvoicePaidTotal(invoice.id);
+                const balance = getInvoiceBalance(invoice);
+                const displayStatus =
+                  isPastDue(invoice) && balance > 0 ? "overdue" : invoice.status;
 
-                      <p className="mt-2 text-sm text-gray-700">
-                        Issue Date: {formatDate(invoice.issue_date)}
-                      </p>
+                return (
+                  <div
+                    key={invoice.id}
+                    className="rounded-2xl border border-gray-200 p-5"
+                  >
+                    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-lg font-bold text-gray-900">
+                            {invoice.invoice_number || "No Invoice Number"}
+                          </p>
 
-                      <p className="text-sm text-gray-700">
-                        Due Date: {formatDate(invoice.due_date)}
-                      </p>
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-semibold ring-1 ${getStatusClass(
+                              displayStatus
+                            )}`}
+                          >
+                            {formatStatus(displayStatus)}
+                          </span>
 
-                      {invoice.notes && (
-                        <p className="mt-2 text-sm text-gray-700">
-                          {invoice.notes}
+                          {invoice.estimate_id && (
+                            <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800 ring-1 ring-blue-100">
+                              From Estimate
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="mt-1 text-sm text-gray-700">
+                          {invoice.title || linkedEstimate?.job_name || "No title"}
                         </p>
+
+                        <p className="mt-2 text-sm text-gray-700">
+                          Customer: {linkedCustomer?.full_name || "—"}
+                        </p>
+
+                        <p className="text-sm text-gray-700">
+                          Project: {linkedEstimate?.job_name || "—"}
+                        </p>
+
+                        <p className="mt-2 text-sm text-gray-700">
+                          Issue Date: {formatDate(invoice.issue_date)}
+                        </p>
+
+                        <p className="text-sm text-gray-700">
+                          Due Date: {formatDate(invoice.due_date)}
+                        </p>
+
+                        {invoice.notes && (
+                          <p className="mt-2 text-sm text-gray-700">
+                            {invoice.notes}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="text-left md:text-right">
+                        <p className="text-xl font-bold text-gray-900">
+                          {formatCurrency(Number(invoice.amount || 0))}
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          Paid: {formatCurrency(paidTotal)}
+                        </p>
+                        <p
+                          className={`text-sm font-semibold ${
+                            balance > 0 ? "text-red-700" : "text-green-700"
+                          }`}
+                        >
+                          Balance: {formatCurrency(balance)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleEdit(invoice)}
+                        className="rounded-xl bg-blue-600 px-3 py-1 text-white"
+                      >
+                        Edit
+                      </button>
+
+                      <a
+                        href={`/invoices/${invoice.id}/print`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-xl bg-black px-3 py-1 text-white"
+                      >
+                        Print
+                      </a>
+
+                      {invoice.status !== "sent" && invoice.status !== "paid" && (
+                        <button
+                          type="button"
+                          onClick={() => setInvoiceStatus(invoice.id, "sent")}
+                          className="rounded-xl bg-yellow-600 px-3 py-1 text-white"
+                        >
+                          Mark Sent
+                        </button>
                       )}
 
-                      <span
-                        className={`mt-2 inline-block rounded px-2 py-1 text-xs font-medium ${getStatusColor(
-                          invoice.status
-                        )}`}
+                      {invoice.status !== "paid" && (
+                        <button
+                          type="button"
+                          onClick={() => markInvoicePaid(invoice)}
+                          className="rounded-xl bg-green-600 px-3 py-1 text-white"
+                        >
+                          Mark Paid
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteInvoice(invoice.id)}
+                        className="rounded-xl bg-red-600 px-3 py-1 text-white"
                       >
-                        {formatStatus(invoice.status)}
-                      </span>
-                    </div>
-
-                    <div className="text-left md:text-right">
-                      <p className="text-lg font-bold text-gray-900">
-                        {formatCurrency(Number(invoice.amount || 0))}
-                      </p>
+                        Delete
+                      </button>
                     </div>
                   </div>
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleEdit(invoice)}
-                      className="rounded bg-blue-600 px-3 py-1 text-white"
-                    >
-                      Edit
-                    </button>
-
-                    <a
-                      href={`/invoices/${invoice.id}/print`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded bg-black px-3 py-1 text-white"
-                    >
-                      Print
-                    </a>
-
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteInvoice(invoice.id)}
-                      className="rounded bg-red-600 px-3 py-1 text-white"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
-        </div>
+        </section>
       </div>
     </main>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  danger = false,
+}: {
+  label: string;
+  value: string;
+  danger?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-2xl p-5 shadow-sm ring-1 ${
+        danger ? "bg-red-50 ring-red-200" : "bg-white ring-gray-200"
+      }`}
+    >
+      <p className="text-sm text-gray-500">{label}</p>
+      <p className="mt-2 text-2xl font-bold text-gray-900">{value}</p>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-sm font-medium text-gray-900">
+        {label}
+      </label>
+      {children}
+    </div>
   );
 }
