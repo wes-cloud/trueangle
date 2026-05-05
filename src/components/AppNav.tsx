@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 type AppNavProps = {
-  onSignOut?: () => void;
+  onSignOut?: () => void | Promise<void>;
 };
 
 const navGroups = [
@@ -52,6 +52,8 @@ const navGroups = [
 
 export default function AppNav({ onSignOut }: AppNavProps) {
   const pathname = usePathname();
+  const router = useRouter();
+
   const [companyName, setCompanyName] = useState("My Company");
 
   useEffect(() => {
@@ -86,6 +88,17 @@ export default function AppNav({ onSignOut }: AppNavProps) {
     return items.some((item) => isActive(item.href));
   }
 
+  async function handleSignOutClick() {
+    if (onSignOut) {
+      await onSignOut();
+    } else {
+      await supabase.auth.signOut();
+    }
+
+    router.push("/");
+    router.refresh();
+  }
+
   return (
     <header className="mx-auto mb-6 max-w-6xl rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
@@ -101,15 +114,13 @@ export default function AppNav({ onSignOut }: AppNavProps) {
             {companyName}
           </p>
 
-          {onSignOut && (
-            <button
-              type="button"
-              onClick={onSignOut}
-              className="rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50"
-            >
-              Sign Out
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={handleSignOutClick}
+            className="rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50"
+          >
+            Sign Out
+          </button>
         </div>
       </div>
 
