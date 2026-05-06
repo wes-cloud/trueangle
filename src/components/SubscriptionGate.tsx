@@ -139,6 +139,28 @@ export default function SubscriptionGate({
           Start 14-Day Free Trial
         </Link>
       </div>
+      {/* FOOTER */}
+<footer className="border-t bg-white px-6 py-10">
+  <div className="mx-auto max-w-6xl flex flex-col items-center justify-between gap-4 md:flex-row">
+    
+    <p className="text-sm text-slate-600">
+      © {new Date().getFullYear()} TrueAngle
+    </p>
+
+    <div className="flex gap-6 text-sm font-medium text-slate-700">
+      <a href="/terms" className="hover:text-slate-950">
+        Terms
+      </a>
+      <a href="/privacy" className="hover:text-slate-950">
+        Privacy
+      </a>
+      <a href="/support" className="hover:text-slate-950">
+        Support
+      </a>
+    </div>
+
+  </div>
+</footer>
     </main>
   );
 }
