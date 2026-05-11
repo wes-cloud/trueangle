@@ -191,5 +191,6 @@ async function handleSignOutClick() {
         })}
       </nav>
     </header>
+    
   );
 }
