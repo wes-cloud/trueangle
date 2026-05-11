@@ -167,10 +167,36 @@ export default function HomePage() {
           </Link>
         </div>
       </section>
+      {/* CTA */}
+<section className="bg-slate-900 px-6 py-20 text-center text-white">
+  <h2 className="text-3xl font-bold">
+    Run your business with confidence
+  </h2>
+
+  <p className="mt-4 text-slate-300">
+    Know your numbers. Price jobs better. Keep more money.
+  </p>
+
+  <Link
+    href="/start-trial"
+    className="mt-8 inline-block rounded-xl bg-white px-6 py-3 text-lg font-semibold text-slate-900 transition hover:bg-slate-200"
+  >
+    Start Free Trial
+  </Link>
+
+  <div className="mt-6 flex justify-center gap-6 text-sm text-slate-400">
+    <a href="/privacy" className="hover:text-white">
+      Privacy
+    </a>
+
+    <a href="/terms" className="hover:text-white">
+      Terms
+    </a>
+  </div>
+</section>
     </main>
   );
 }
-
 
 function Step({ number, title }: { number: string; title: string }) {
   return (
