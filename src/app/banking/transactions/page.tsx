@@ -440,8 +440,10 @@ export default function BankingTransactionsPage() {
   const createLinkToken = useCallback(async () => {
     try {
       const res = await fetch("/api/plaid/create-link-token", {
-        method: "POST",
-      });
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ user_id: user?.id }),
+});
       const data = await res.json();
 
       if (!res.ok) {

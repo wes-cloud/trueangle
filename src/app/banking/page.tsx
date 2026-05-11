@@ -37,8 +37,10 @@ export default function BankingPage() {
   const createLinkToken = useCallback(async () => {
     try {
       const res = await fetch("/api/plaid/create-link-token", {
-        method: "POST",
-      });
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ user_id: user?.id }),
+});
       const data = await res.json();
 
       if (!res.ok) {
@@ -137,7 +139,7 @@ export default function BankingPage() {
         <div className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
           <h1 className="text-3xl font-bold text-gray-900">Banking</h1>
           <p className="mt-2 text-gray-600">
-            Connect your bank in Plaid Sandbox first.
+            Connect your bank account to import and review transactions.
           </p>
 
           <div className="mt-6 flex flex-wrap gap-3">

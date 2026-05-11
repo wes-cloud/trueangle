@@ -26,61 +26,33 @@ export async function POST(req: NextRequest) {
     const accessToken = exchange.data.access_token;
     const itemId = exchange.data.item_id;
 
-    const { error: itemError } = await supabaseAdmin.from("plaid_items").upsert(
+    const { error } = await supabaseAdmin.from("plaid_items").upsert(
       {
         user_id,
         plaid_item_id: itemId,
         access_token: accessToken,
-        institution_id: metadata?.institution?.institution_id || null,
         institution_name: metadata?.institution?.name || null,
+        institution_id: metadata?.institution?.institution_id || null,
         updated_at: new Date().toISOString(),
       },
-      { onConflict: "plaid_item_id" }
+      {
+        onConflict: "plaid_item_id",
+      }
     );
 
-    if (itemError) {
-      console.error("plaid_items upsert error", itemError);
-      return NextResponse.json(
-        { error: `Unable to save Plaid item: ${itemError.message}` },
-        { status: 500 }
-      );
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    if (Array.isArray(metadata?.accounts) && metadata.accounts.length > 0) {
-      const accountRows = metadata.accounts.map((account: any) => ({
-        user_id,
-        plaid_item_id: itemId,
-        plaid_account_id: account.id,
-        name: account.name || null,
-        official_name: account.official_name || null,
-        mask: account.mask || null,
-        type: account.type || null,
-        subtype: account.subtype || null,
-        updated_at: new Date().toISOString(),
-      }));
-
-      const { error: accountError } = await supabaseAdmin
-        .from("plaid_accounts")
-        .upsert(accountRows, { onConflict: "plaid_account_id" });
-
-      if (accountError) {
-        console.error("plaid_accounts upsert error", accountError);
-        return NextResponse.json(
-          { error: `Unable to save Plaid accounts: ${accountError.message}` },
-          { status: 500 }
-        );
-      }
-    }
-
-    return NextResponse.json({ success: true, item_id: itemId });
+    return NextResponse.json({ success: true, plaid_item_id: itemId });
   } catch (error: any) {
-    console.error("exchange-public-token error", error);
+    console.error("exchange-public-token error", error?.response?.data || error);
     return NextResponse.json(
       {
         error:
           error?.response?.data?.error_message ||
           error?.message ||
-          "Unable to exchange public token.",
+          "Unable to exchange Plaid public token.",
       },
       { status: 500 }
     );

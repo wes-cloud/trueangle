@@ -1,13 +1,16 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { plaidClient, plaidCountryCodes, plaidProducts } from "@/lib/plaid";
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   try {
+    const body = await req.json().catch(() => ({}));
+    const userId = body.user_id || crypto.randomUUID();
+
     const response = await plaidClient.linkTokenCreate({
       user: {
-        client_user_id: crypto.randomUUID(),
+        client_user_id: userId,
       },
-      client_name: "WW Contracting",
+      client_name: "TrueAngle",
       products: plaidProducts,
       country_codes: plaidCountryCodes,
       language: "en",
@@ -17,10 +20,15 @@ export async function POST() {
     });
 
     return NextResponse.json({ link_token: response.data.link_token });
-  } catch (error) {
-    console.error("create-link-token error", error);
+  } catch (error: any) {
+    console.error("create-link-token error", error?.response?.data || error);
     return NextResponse.json(
-      { error: "Unable to create Plaid link token." },
+      {
+        error:
+          error?.response?.data?.error_message ||
+          error?.message ||
+          "Unable to create Plaid link token.",
+      },
       { status: 500 }
     );
   }
