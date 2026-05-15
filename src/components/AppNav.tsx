@@ -103,30 +103,25 @@ async function handleSignOutClick() {
     router.refresh();
   }
 
-  return (
-    <header className="mx-auto mb-6 max-w-6xl rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
-<Link
-  href="/"
-  className="flex items-center gap-3"
->
-  <Image
-    src="/trueangle-logo.png"
-    alt="TrueAngle logo"
-    width={42}
-    height={42}
-    className="rounded-xl"
-  />
+return (
+  <header className="mx-auto mb-6 max-w-6xl rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
+      <Link href="/" className="flex items-center gap-3">
+        <img
+          src="/trueangle-logo.png"
+          alt="TrueAngle logo"
+          className="h-9 w-9 rounded-xl object-cover"
+        />
 
-  <span className="text-2xl font-black tracking-tight text-slate-950">
-    TrueAngle
-  </span>
-</Link>
+        <span className="text-2xl font-black tracking-tight text-slate-950">
+          TrueAngle
+        </span>
+      </Link>
 
-        <div className="flex items-center gap-3">
-          <p className="hidden max-w-[240px] truncate text-sm font-semibold text-slate-800 sm:block">
-            {companyName}
-          </p>
+      <div className="flex items-center gap-3">
+        <p className="hidden max-w-[240px] truncate text-sm font-semibold text-slate-800 sm:block">
+          {companyName}
+        </p>
 
           <button
             type="button"
