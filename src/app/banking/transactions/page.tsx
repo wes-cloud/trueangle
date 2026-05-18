@@ -40,6 +40,7 @@ type PlaidTransaction = {
   plaid_account_id: string | null;
   matched_payment_id?: string | null;
   match_status?: string | null;
+  created_at?: string | null;
 };
 
 type Payment = {
@@ -119,8 +120,10 @@ function formatCurrency(value: number) {
 
 function formatDate(value?: string | null) {
   if (!value) return "—";
+
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
+
   return date.toLocaleDateString("en-US");
 }
 
@@ -154,8 +157,21 @@ function dedupeCategories(values: string[]) {
   return result;
 }
 
+/**
+ * Plaid convention:
+ * amount > 0 = money leaving the account = expense
+ * amount < 0 = money entering the account = deposit / income
+ */
 function isDeposit(transaction: PlaidTransaction) {
+  return Number(transaction.amount || 0) < 0;
+}
+
+function isExpense(transaction: PlaidTransaction) {
   return Number(transaction.amount || 0) > 0;
+}
+
+function getDisplayAmount(transaction: PlaidTransaction) {
+  return Math.abs(Number(transaction.amount || 0));
 }
 
 function getTransactionDate(transaction: PlaidTransaction) {
@@ -222,14 +238,14 @@ export default function BankingTransactionsPage() {
   }
 
   function findMatchingPayment(transaction: PlaidTransaction) {
-    const amount = Number(transaction.amount || 0);
-    const transactionDate = getTransactionDate(transaction);
-
     if (!isDeposit(transaction)) return null;
+
+    const amount = getDisplayAmount(transaction);
+    const transactionDate = getTransactionDate(transaction);
 
     const possibleMatches = payments
       .filter((payment) => {
-        const paymentAmount = Number(payment.amount || 0);
+        const paymentAmount = Math.abs(Number(payment.amount || 0));
         const status = payment.match_status || "unmatched";
 
         return paymentAmount === amount && status !== "matched";
@@ -277,6 +293,27 @@ export default function BankingTransactionsPage() {
     setMessage(`Category "${trimmed}" added.`);
   }
 
+  const createLinkToken = useCallback(async (userId: string) => {
+    try {
+      const res = await fetch("/api/plaid/create-link-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setMessage(data.error || "Unable to create Plaid link token.");
+        return;
+      }
+
+      setLinkToken(data.link_token || "");
+    } catch {
+      setMessage("Unable to create Plaid link token.");
+    }
+  }, []);
+
   async function loadPageData(currentUserId: string) {
     const [
       { data: customersData, error: customersError },
@@ -301,7 +338,7 @@ export default function BankingTransactionsPage() {
       supabase
         .from("plaid_transactions")
         .select(
-          "id, plaid_transaction_id, name, merchant_name, amount, category, posted_date, authorized_date, pending, imported_to_expenses, imported_to_income, ignored, ignored_reason, plaid_account_id, matched_payment_id, match_status"
+          "id, plaid_transaction_id, name, merchant_name, amount, category, posted_date, authorized_date, pending, imported_to_expenses, imported_to_income, ignored, ignored_reason, plaid_account_id, matched_payment_id, match_status, created_at"
         )
         .eq("user_id", currentUserId)
         .order("posted_date", { ascending: false })
@@ -375,29 +412,29 @@ export default function BankingTransactionsPage() {
       return;
     }
 
-    const safeCustomers = (customersData || []) as Customer[];
-    const safeEstimates = (estimatesData || []) as Estimate[];
     const safeTransactions = (transactionsData || []) as PlaidTransaction[];
-   const safePayments = (paymentsData || []).map((payment: any) => ({
-  id: payment.id,
-  user_id: payment.user_id,
-  invoice_id: payment.invoice_id,
-  amount: payment.amount,
-  payment_date: payment.payment_date,
-  payment_method: payment.payment_method,
-  notes: payment.notes,
-  match_status: payment.match_status,
-  plaid_transaction_id: payment.plaid_transaction_id,
-  invoices: Array.isArray(payment.invoices)
-    ? payment.invoices[0] || null
-    : payment.invoices || null,
-})) as Payment[];
+
+    const safePayments = (paymentsData || []).map((payment: any) => ({
+      id: payment.id,
+      user_id: payment.user_id,
+      invoice_id: payment.invoice_id,
+      amount: payment.amount,
+      payment_date: payment.payment_date,
+      payment_method: payment.payment_method,
+      notes: payment.notes,
+      match_status: payment.match_status,
+      plaid_transaction_id: payment.plaid_transaction_id,
+      invoices: Array.isArray(payment.invoices)
+        ? payment.invoices[0] || null
+        : payment.invoices || null,
+    })) as Payment[];
+
     const safeVendorMemory = (vendorMemoryData || []) as VendorMemory[];
     const safeCustomCategories =
       (customCategoriesData || []) as ExpenseCategory[];
 
-    setCustomers(safeCustomers);
-    setEstimates(safeEstimates);
+    setCustomers((customersData || []) as Customer[]);
+    setEstimates((estimatesData || []) as Estimate[]);
     setTransactions(safeTransactions);
     setPayments(safePayments);
     setVendorMemory(safeVendorMemory);
@@ -437,26 +474,6 @@ export default function BankingTransactionsPage() {
     });
   }
 
-  const createLinkToken = useCallback(async () => {
-    try {
-      const res = await fetch("/api/plaid/create-link-token", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ user_id: user?.id }),
-});
-      const data = await res.json();
-
-      if (!res.ok) {
-        setMessage(data.error || "Unable to create Plaid link token.");
-        return;
-      }
-
-      setLinkToken(data.link_token || "");
-    } catch {
-      setMessage("Unable to create Plaid link token.");
-    }
-  }, []);
-
   useEffect(() => {
     async function loadUser() {
       const {
@@ -480,7 +497,8 @@ export default function BankingTransactionsPage() {
       setUser(safeUser);
 
       if (safeUser) {
-        await Promise.all([loadPageData(safeUser.id), createLinkToken()]);
+        await loadPageData(safeUser.id);
+        await createLinkToken(safeUser.id);
       }
 
       setLoading(false);
@@ -539,7 +557,7 @@ export default function BankingTransactionsPage() {
 
       setMessage("Bank connected and transactions synced.");
       await loadPageData(user.id);
-      await createLinkToken();
+      await createLinkToken(user.id);
     },
     [user, createLinkToken]
   );
@@ -562,6 +580,7 @@ export default function BankingTransactionsPage() {
     if (!user) return;
 
     setIsSyncing(true);
+
     try {
       const syncRes = await fetch("/api/plaid/sync-transactions", {
         method: "POST",
@@ -722,6 +741,11 @@ export default function BankingTransactionsPage() {
       return;
     }
 
+    if (!isExpense(transaction)) {
+      setMessage("Deposits cannot be added as expenses.");
+      return;
+    }
+
     const draft = drafts[transaction.id];
     if (!draft) return;
 
@@ -739,7 +763,7 @@ export default function BankingTransactionsPage() {
           estimate_id: draft.estimateId || null,
           vendor: vendorName,
           category: draft.category.trim() || null,
-          amount: Math.abs(Number(transaction.amount || 0)),
+          amount: getDisplayAmount(transaction),
           expense_date: expenseDate,
           notes: draft.notes.trim() || null,
           created_at: new Date().toISOString(),
@@ -788,7 +812,7 @@ export default function BankingTransactionsPage() {
         .update({
           ignored: true,
           ignored_reason: isDeposit(transaction)
-            ? "Not matched to invoice payment"
+            ? "Deposit not matched to invoice payment"
             : "Not an expense",
           updated_at: new Date().toISOString(),
         })
@@ -983,13 +1007,18 @@ export default function BankingTransactionsPage() {
                               <p className="mt-1 text-sm font-semibold text-green-700">
                                 Deposit / income transaction
                               </p>
-                            ) : null}
-
-                            {draft.suggestedFromMemory && !isDeposit(transaction) && (
-                              <p className="mt-1 text-sm font-medium text-green-700">
-                                Category suggested from vendor memory
+                            ) : (
+                              <p className="mt-1 text-sm font-semibold text-gray-700">
+                                Expense transaction
                               </p>
                             )}
+
+                            {draft.suggestedFromMemory &&
+                              isExpense(transaction) && (
+                                <p className="mt-1 text-sm font-medium text-green-700">
+                                  Category suggested from vendor memory
+                                </p>
+                              )}
 
                             {transaction.pending ? (
                               <p className="text-sm font-medium text-amber-700">
@@ -1006,7 +1035,7 @@ export default function BankingTransactionsPage() {
                                   : "text-gray-900"
                               }`}
                             >
-                              {formatCurrency(Number(transaction.amount || 0))}
+                              {formatCurrency(getDisplayAmount(transaction))}
                             </p>
                             <p className="text-sm text-gray-500">
                               Bank category: {transaction.category || "—"}
@@ -1029,14 +1058,14 @@ export default function BankingTransactionsPage() {
                             <p className="text-sm text-green-900">
                               Amount:{" "}
                               {formatCurrency(
-                                Number(possiblePaymentMatch.amount || 0)
+                                Math.abs(Number(possiblePaymentMatch.amount || 0))
                               )}
                             </p>
                           </div>
                         )}
                       </div>
 
-                      {!isDeposit(transaction) ? (
+                      {isExpense(transaction) ? (
                         <div className="grid gap-4 md:grid-cols-2">
                           <div>
                             <label className="mb-1 block text-sm font-medium text-gray-900">
@@ -1218,7 +1247,7 @@ export default function BankingTransactionsPage() {
                         </button>
                       )}
 
-                      {!isDeposit(transaction) && (
+                      {isExpense(transaction) && (
                         <button
                           type="button"
                           onClick={() => handleConvertToExpense(transaction)}
@@ -1268,7 +1297,7 @@ export default function BankingTransactionsPage() {
 
                     <div className="text-left md:text-right">
                       <p className="font-semibold text-green-900">
-                        {formatCurrency(Number(transaction.amount || 0))}
+                        {formatCurrency(getDisplayAmount(transaction))}
                       </p>
                       <p className="text-sm text-green-700">
                         Matched to invoice payment
@@ -1307,7 +1336,7 @@ export default function BankingTransactionsPage() {
 
                     <div className="text-left md:text-right">
                       <p className="font-semibold text-gray-900">
-                        {formatCurrency(Number(transaction.amount || 0))}
+                        {formatCurrency(getDisplayAmount(transaction))}
                       </p>
                       <p className="text-sm text-green-700">
                         Imported to expenses
@@ -1349,7 +1378,7 @@ export default function BankingTransactionsPage() {
 
                     <div className="text-left md:text-right">
                       <p className="font-semibold text-gray-900">
-                        {formatCurrency(Number(transaction.amount || 0))}
+                        {formatCurrency(getDisplayAmount(transaction))}
                       </p>
                       <p className="text-sm text-gray-500">Ignored</p>
                     </div>
