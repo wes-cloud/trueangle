@@ -42,8 +42,10 @@ type LineItem = {
   id: string;
   estimate_id: string;
   type: string;
+  description?: string | null;
   quantity: number;
   rate: number;
+  show_quantity_rate?: boolean | null;
 };
 
 type Customer = {
@@ -95,9 +97,11 @@ type DraftLineItem = {
   id: number;
   mode: "preset" | "custom";
   type: string;
+  description: string;
   quantity: string;
   rate: string;
   unit: string;
+  showQuantityRate: boolean;
   saveAsPreset: boolean;
 };
 
@@ -138,15 +142,17 @@ function getEstimateExpenseTotal(expenses: Expense[], estimateId: string) {
 }
 
 function makeDefaultLineItem(): DraftLineItem {
-  return {
-    id: Date.now() + Math.floor(Math.random() * 10000),
-    mode: "preset",
-    type: "Framing",
-    quantity: "",
-    rate: defaultLaborRates.Framing.rate.toString(),
-    unit: defaultLaborRates.Framing.unit,
-    saveAsPreset: false,
-  };
+return {
+  id: Date.now() + Math.floor(Math.random() * 10000),
+  mode: "preset",
+  type: "Framing",
+  description: "",
+  quantity: "",
+  rate: defaultLaborRates.Framing.rate.toString(),
+  unit: defaultLaborRates.Framing.unit,
+  showQuantityRate: true,
+  saveAsPreset: false,
+};
 }
 
 export default function EstimatesNewPage() {
@@ -179,6 +185,9 @@ export default function EstimatesNewPage() {
   const [markupPercent, setMarkupPercent] = useState("0");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [taxEnabled, setTaxEnabled] = useState(false);
+const [taxLabel, setTaxLabel] = useState("Sales Tax");
+const [taxRate, setTaxRate] = useState("0");
 
   const [lineItems, setLineItems] = useState<DraftLineItem[]>([
     makeDefaultLineItem(),
@@ -209,6 +218,11 @@ export default function EstimatesNewPage() {
 
   const markupAmount = costTotal * (Number(markupPercent || 0) / 100);
   const sellingPrice = costTotal + markupAmount;
+  const taxAmount = taxEnabled
+  ? sellingPrice * (Number(taxRate || 0) / 100)
+  : 0;
+
+const finalTotal = sellingPrice + taxAmount;
 
   function resetForm() {
     setSelectedCustomerId("");
@@ -224,6 +238,9 @@ export default function EstimatesNewPage() {
     setValidUntil("");
     setEstimateNumber(buildEstimateNumber());
     setMarkupPercent("0");
+    setTaxEnabled(false);
+setTaxLabel("Sales Tax");
+setTaxRate("0");
     setEditingId(null);
     setLineItems([makeDefaultLineItem()]);
   }
@@ -603,12 +620,14 @@ export default function EstimatesNewPage() {
       return;
     }
 
-    const cleanedLineItems = lineItems
-      .map((item) => ({
-        type: item.type.trim(),
-        quantity: Number(item.quantity || 0),
-        rate: Number(item.rate || 0),
-      }))
+const cleanedLineItems = lineItems
+  .map((item) => ({
+    type: item.type.trim(),
+    description: item.description.trim(),
+    quantity: Number(item.quantity || 0),
+    rate: Number(item.rate || 0),
+    show_quantity_rate: item.showQuantityRate,
+  }))
       .filter((item) => item.type && item.quantity > 0);
 
     if (cleanedLineItems.length === 0) {
@@ -646,7 +665,11 @@ export default function EstimatesNewPage() {
       exclusions,
       valid_until: validUntil || null,
       estimate_number: estimateNumber,
-      amount: sellingPrice,
+      amount: finalTotal,
+tax_enabled: taxEnabled,
+tax_label: taxLabel,
+tax_rate: Number(taxRate || 0),
+tax_amount: taxAmount,
       markup_percent: Number(markupPercent),
     };
 
@@ -675,9 +698,11 @@ export default function EstimatesNewPage() {
 
         const itemsToInsert = cleanedLineItems.map((item) => ({
           estimate_id: editingId,
-          type: item.type,
-          quantity: item.quantity,
-          rate: item.rate,
+type: item.type,
+description: item.description,
+quantity: item.quantity,
+rate: item.rate,
+show_quantity_rate: item.show_quantity_rate,
         }));
 
         const { error: insertNewItemsError } = await supabase
@@ -713,9 +738,11 @@ export default function EstimatesNewPage() {
 
       const itemsToInsert = cleanedLineItems.map((item) => ({
         estimate_id: estimateData.id,
-        type: item.type,
-        quantity: item.quantity,
-        rate: item.rate,
+type: item.type,
+description: item.description,
+quantity: item.quantity,
+rate: item.rate,
+show_quantity_rate: item.show_quantity_rate,
       }));
 
       const { error: itemsError } = await supabase
@@ -756,19 +783,21 @@ export default function EstimatesNewPage() {
     setSelectedCustomerId(estimate.customer_id || "");
     setIsNewCustomer(!estimate.customer_id);
 
-    const mappedLineItems: DraftLineItem[] = estimate.line_items.map((item) => {
-      const isSavedPreset = Boolean(presetOptions[item.type]);
+const mappedLineItems: DraftLineItem[] = estimate.line_items.map((item) => {
+  const isSavedPreset = Boolean(presetOptions[item.type]);
 
-      return {
-        id: Date.now() + Math.floor(Math.random() * 10000),
-        mode: isSavedPreset ? "preset" : "custom",
-        type: item.type,
-        quantity: String(item.quantity),
-        rate: String(item.rate),
-        unit: presetOptions[item.type]?.unit || "flat amount",
-        saveAsPreset: false,
-      };
-    });
+  return {
+    id: Date.now() + Math.floor(Math.random() * 10000),
+    mode: isSavedPreset ? "preset" : "custom",
+    type: item.type,
+    description: item.description || "",
+    quantity: String(item.quantity),
+    rate: String(item.rate),
+    unit: presetOptions[item.type]?.unit || "flat amount",
+    showQuantityRate: item.show_quantity_rate ?? true,
+    saveAsPreset: false,
+  };
+});
 
     setLineItems(
       mappedLineItems.length > 0 ? mappedLineItems : [makeDefaultLineItem()]
@@ -1111,6 +1140,36 @@ export default function EstimatesNewPage() {
                         </p>
                       </div>
 
+<div className="md:col-span-4">
+  <label className="mb-1 block text-sm font-medium text-gray-900">
+    Description
+  </label>
+
+  <textarea
+    value={item.description}
+    onChange={(e) =>
+      updateLineItem(item.id, "description", e.target.value)
+    }
+    placeholder="Optional details shown to customer"
+    className="min-h-[90px] w-full rounded-lg border p-3 text-gray-900"
+  />
+
+  <label className="mt-3 flex items-center gap-2 text-sm text-gray-700">
+    <input
+      type="checkbox"
+      checked={item.showQuantityRate}
+      onChange={(e) =>
+        updateLineItem(
+          item.id,
+          "showQuantityRate",
+          e.target.checked
+        )
+      }
+    />
+    Show quantity and rate to customer
+  </label>
+</div>
+
                       <div>
                         <label className="mb-1 block text-sm font-medium text-gray-900">
                           Quantity
@@ -1177,13 +1236,75 @@ export default function EstimatesNewPage() {
               />
             </div>
 
-            <div className="space-y-2 rounded-xl bg-gray-50 p-4 text-gray-900">
-              <p>Cost Total: {formatCurrency(costTotal)}</p>
-              <p>Markup Amount: {formatCurrency(markupAmount)}</p>
-              <p className="text-xl font-bold">
-                Selling Price: {formatCurrency(sellingPrice)}
-              </p>
-            </div>
+<div className="rounded-xl border border-gray-200 p-4">
+  <div className="flex items-center gap-2">
+    <input
+      type="checkbox"
+      checked={taxEnabled}
+      onChange={(e) => setTaxEnabled(e.target.checked)}
+    />
+
+    <label className="font-medium text-gray-900">
+      Apply Tax
+    </label>
+  </div>
+
+  {taxEnabled && (
+    <div className="mt-4 grid gap-4 md:grid-cols-2">
+      <div>
+        <label className="mb-1 block text-sm font-medium text-gray-900">
+          Tax Type
+        </label>
+
+        <select
+          value={taxLabel}
+          onChange={(e) => setTaxLabel(e.target.value)}
+          className="w-full rounded-lg border p-3 text-gray-900"
+        >
+          <option>Sales Tax</option>
+          <option>Service Tax</option>
+          <option>Materials Tax</option>
+          <option>Local Tax</option>
+          <option>Other</option>
+        </select>
+      </div>
+
+      <div>
+        <label className="mb-1 block text-sm font-medium text-gray-900">
+          Tax Rate %
+        </label>
+
+        <input
+          type="number"
+          value={taxRate}
+          onChange={(e) => setTaxRate(e.target.value)}
+          className="w-full rounded-lg border p-3 text-gray-900"
+        />
+      </div>
+    </div>
+  )}
+</div>
+
+<div className="space-y-2 rounded-xl bg-gray-50 p-4 text-gray-900">
+  <p>Cost Total: {formatCurrency(costTotal)}</p>
+
+  <p>Markup Amount: {formatCurrency(markupAmount)}</p>
+
+  <p>
+    Subtotal: {formatCurrency(sellingPrice)}
+  </p>
+
+  {taxEnabled && (
+    <p>
+      {taxLabel} ({taxRate}%):{" "}
+      {formatCurrency(taxAmount)}
+    </p>
+  )}
+
+  <p className="text-xl font-bold">
+    Total: {formatCurrency(finalTotal)}
+  </p>
+</div>
 
             <div className="flex gap-3">
               <button
