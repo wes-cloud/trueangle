@@ -252,8 +252,16 @@ function dedupeCategories(values: string[]) {
 
 /**
  * Plaid convention:
- * amount > 0 = money leaving the account = expense
- * amount < 0 = money entering the account = deposit / income
+ * amount > 0 = money leaving the account
+ * amount < 0 = money entering the account
+ *
+ * Incoming transactions are not always income.
+ * They may also be:
+ * - transfers
+ * - refunds
+ * - credits
+ * - owner contributions
+ * - account movements
  */
 function isDeposit(transaction: PlaidTransaction) {
   return Number(transaction.amount || 0) < 0;
@@ -909,7 +917,7 @@ export default function BankingTransactionsPage() {
         .update({
           ignored: true,
           ignored_reason: isDeposit(transaction)
-            ? "Deposit not matched to invoice payment"
+            ? "Incoming transaction ignored - transfer, refund, or not invoice income"
             : "Not an expense",
           updated_at: new Date().toISOString(),
         })
@@ -1102,7 +1110,7 @@ export default function BankingTransactionsPage() {
 
                             {isDeposit(transaction) ? (
                               <p className="mt-1 text-sm font-semibold text-green-700">
-                                Deposit / income transaction
+                                Incoming transaction
                               </p>
                             ) : (
                               <p className="mt-1 text-sm font-semibold text-gray-700">
@@ -1294,11 +1302,10 @@ export default function BankingTransactionsPage() {
                       ) : (
                         <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5">
                           <p className="text-sm font-semibold text-gray-900">
-                            This looks like a deposit.
+                            This looks like money coming into the account.
                           </p>
                           <p className="mt-1 text-sm text-gray-600">
-                            Match it to an invoice payment to avoid double
-                            counting revenue.
+                            Match it to an invoice payment, or ignore it if it is a transfer, refund, or account movement.
                           </p>
                         </div>
                       )}
@@ -1318,7 +1325,7 @@ export default function BankingTransactionsPage() {
                         {ignoringId === transaction.id
                           ? "Ignoring..."
                           : isDeposit(transaction)
-                          ? "Ignore Deposit"
+                          ? "Ignore Incoming"
                           : "Ignore / Not an Expense"}
                       </button>
 
