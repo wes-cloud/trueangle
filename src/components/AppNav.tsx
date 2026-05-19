@@ -64,10 +64,25 @@ export default function AppNav({ onSignOut }: AppNavProps) {
     loadCompanyName();
   }, []);
 
-  function isActive(href: string) {
-    if (href === "/") return pathname === "/";
-    return pathname === href || pathname.startsWith(`${href}/`);
+function isActive(href: string) {
+  if (href === "/") return pathname === "/";
+
+  const exactMatchRoutes = [
+    "/estimates",
+    "/invoices",
+    "/expenses",
+    "/banking",
+    "/customers",
+    "/reports",
+    "/settings",
+  ];
+
+  if (exactMatchRoutes.includes(href)) {
+    return pathname === href;
   }
+
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
   function groupIsActive(items?: { href: string; label: string }[]) {
     if (!items) return false;
@@ -141,7 +156,7 @@ export default function AppNav({ onSignOut }: AppNavProps) {
           const isOpen = openGroup === group.label;
 
           return (
-            <div key={group.label} className="relative">
+            <div key={group.label} className="group relative">
               <button
                 type="button"
                 onClick={() =>
@@ -160,8 +175,11 @@ export default function AppNav({ onSignOut }: AppNavProps) {
                 <span className="text-xs">{isOpen ? "▲" : "▼"}</span>
               </button>
 
-              {isOpen && (
-                <div className="mt-2 rounded-xl border border-slate-200 bg-white p-2 shadow-lg sm:absolute sm:left-0 sm:top-full sm:z-50 sm:min-w-56">
+<div
+  className={`mt-2 rounded-xl border border-slate-200 bg-white p-2 shadow-lg sm:absolute sm:left-0 sm:top-full sm:z-50 sm:min-w-56 ${
+    isOpen ? "block" : "hidden sm:group-hover:block"
+  }`}
+>
                   {group.items?.map((item) => {
                     const itemActive = isActive(item.href);
 
@@ -181,7 +199,6 @@ export default function AppNav({ onSignOut }: AppNavProps) {
                     );
                   })}
                 </div>
-              )}
             </div>
           );
         })}
