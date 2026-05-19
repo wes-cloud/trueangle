@@ -42,6 +42,12 @@ type LineItem = {
   rate: number;
 };
 
+type EstimatePhoto = {
+  id: string;
+  image_url: string;
+  caption: string | null;
+};
+
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -72,9 +78,9 @@ export default function EstimatePrintPage() {
   const [error, setError] = useState("");
   const [estimate, setEstimate] = useState<Estimate | null>(null);
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
-  const [companySettings, setCompanySettings] = useState<CompanySettings | null>(
-    null
-  );
+  const [photos, setPhotos] = useState<EstimatePhoto[]>([]);
+  const [companySettings, setCompanySettings] =
+    useState<CompanySettings | null>(null);
 
   useEffect(() => {
     async function loadPrintPage() {
@@ -138,6 +144,18 @@ export default function EstimatePrintPage() {
         return;
       }
 
+      const { data: photoData, error: photoError } = await supabase
+        .from("estimate_photos")
+        .select("id, image_url, caption")
+        .eq("estimate_id", estimateId)
+        .order("created_at", { ascending: false });
+
+      if (photoError) {
+        setError(photoError.message);
+        setLoading(false);
+        return;
+      }
+
       const { data: settingsData } = await supabase
         .from("company_settings")
         .select(
@@ -157,6 +175,7 @@ export default function EstimatePrintPage() {
 
       setEstimate(estimateData as Estimate);
       setLineItems((lineItemsData || []) as LineItem[]);
+      setPhotos((photoData || []) as EstimatePhoto[]);
       setCompanySettings((settingsData as CompanySettings) || null);
       setLoading(false);
     }
@@ -173,10 +192,7 @@ export default function EstimatePrintPage() {
 
   if (loading) {
     return (
-      <main
-        className="min-h-screen p-8"
-        style={{ backgroundColor: "#ffffff", color: "#000000", opacity: 1 }}
-      >
+      <main className="min-h-screen p-8" style={{ backgroundColor: "#ffffff", color: "#000000" }}>
         <p>Loading printable estimate...</p>
       </main>
     );
@@ -184,10 +200,7 @@ export default function EstimatePrintPage() {
 
   if (error || !estimate) {
     return (
-      <main
-        className="min-h-screen p-8"
-        style={{ backgroundColor: "#ffffff", color: "#000000", opacity: 1 }}
-      >
+      <main className="min-h-screen p-8" style={{ backgroundColor: "#ffffff", color: "#000000" }}>
         <p style={{ color: "#dc2626" }}>
           Error: {error || "Estimate not found."}
         </p>
@@ -228,13 +241,20 @@ export default function EstimatePrintPage() {
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
+
+          img {
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+
+          .photo-card {
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
         }
       `}</style>
 
-      <main
-        className="min-h-screen p-8"
-        style={{ backgroundColor: "#ffffff", color: "#000000", opacity: 1 }}
-      >
+      <main className="min-h-screen p-8" style={{ backgroundColor: "#ffffff", color: "#000000" }}>
         <div className="no-print mx-auto mb-6 flex max-w-5xl gap-3">
           <button
             type="button"
@@ -258,8 +278,6 @@ export default function EstimatePrintPage() {
           style={{
             backgroundColor: "#ffffff",
             color: "#000000",
-            opacity: 1,
-            filter: "none",
             border: "1px solid #e5e7eb",
           }}
         >
@@ -270,7 +288,6 @@ export default function EstimatePrintPage() {
                   src={companySettings.logo_url}
                   alt="Company logo"
                   className="mb-4 max-h-20"
-                  style={{ opacity: 1 }}
                 />
               ) : null}
 
@@ -292,20 +309,12 @@ export default function EstimatePrintPage() {
               </div>
             </div>
 
-            <div
-              className="min-w-[240px] rounded-xl p-4"
-              style={{ border: "1px solid #d1d5db", opacity: 1 }}
-            >
-              <p
-                className="mb-2 text-xs font-bold uppercase tracking-wide"
-                style={{ color: "#1f2937" }}
-              >
+            <div className="min-w-[240px] rounded-xl p-4" style={{ border: "1px solid #d1d5db" }}>
+              <p className="mb-2 text-xs font-bold uppercase tracking-wide" style={{ color: "#1f2937" }}>
                 Estimate
               </p>
               <p style={{ color: "#111827" }}>
-                <span style={{ fontWeight: 600, color: "#000000" }}>
-                  Estimate #:
-                </span>{" "}
+                <span style={{ fontWeight: 600, color: "#000000" }}>Estimate #:</span>{" "}
                 {estimate.estimate_number || "—"}
               </p>
               <p style={{ color: "#111827" }}>
@@ -313,53 +322,27 @@ export default function EstimatePrintPage() {
                 {formatDate(estimate.created_at)}
               </p>
               <p style={{ color: "#111827" }}>
-                <span style={{ fontWeight: 600, color: "#000000" }}>
-                  Valid Until:
-                </span>{" "}
+                <span style={{ fontWeight: 600, color: "#000000" }}>Valid Until:</span>{" "}
                 {formatDate(estimate.valid_until)}
               </p>
             </div>
           </div>
 
           <div className="mb-8 grid gap-6 md:grid-cols-2">
-            <div
-              className="rounded-xl p-4"
-              style={{ border: "1px solid #d1d5db", opacity: 1 }}
-            >
-              <p
-                className="mb-2 text-xs font-bold uppercase tracking-wide"
-                style={{ color: "#1f2937" }}
-              >
+            <div className="rounded-xl p-4" style={{ border: "1px solid #d1d5db" }}>
+              <p className="mb-2 text-xs font-bold uppercase tracking-wide" style={{ color: "#1f2937" }}>
                 Customer
               </p>
               <p style={{ fontWeight: 600, color: "#000000" }}>
                 {estimate.customer_name || "—"}
               </p>
-              {estimate.customer_address && (
-                <p className="text-sm" style={{ color: "#111827" }}>
-                  {estimate.customer_address}
-                </p>
-              )}
-              {estimate.customer_phone && (
-                <p className="text-sm" style={{ color: "#111827" }}>
-                  {estimate.customer_phone}
-                </p>
-              )}
-              {estimate.customer_email && (
-                <p className="text-sm" style={{ color: "#111827" }}>
-                  {estimate.customer_email}
-                </p>
-              )}
+              {estimate.customer_address && <p className="text-sm" style={{ color: "#111827" }}>{estimate.customer_address}</p>}
+              {estimate.customer_phone && <p className="text-sm" style={{ color: "#111827" }}>{estimate.customer_phone}</p>}
+              {estimate.customer_email && <p className="text-sm" style={{ color: "#111827" }}>{estimate.customer_email}</p>}
             </div>
 
-            <div
-              className="rounded-xl p-4"
-              style={{ border: "1px solid #d1d5db", opacity: 1 }}
-            >
-              <p
-                className="mb-2 text-xs font-bold uppercase tracking-wide"
-                style={{ color: "#1f2937" }}
-              >
+            <div className="rounded-xl p-4" style={{ border: "1px solid #d1d5db" }}>
+              <p className="mb-2 text-xs font-bold uppercase tracking-wide" style={{ color: "#1f2937" }}>
                 Project
               </p>
               <p style={{ fontWeight: 600, color: "#000000" }}>
@@ -378,79 +361,35 @@ export default function EstimatePrintPage() {
               Line Items
             </h2>
 
-            <div
-              className="overflow-hidden rounded-xl"
-              style={{ border: "1px solid #d1d5db", opacity: 1 }}
-            >
+            <div className="overflow-hidden rounded-xl" style={{ border: "1px solid #d1d5db" }}>
               <table className="w-full border-collapse">
                 <thead>
                   <tr style={{ backgroundColor: "#f3f4f6" }}>
-                    <th
-                      className="px-4 py-3 text-left text-sm"
-                      style={{ color: "#000000" }}
-                    >
-                      Description
-                    </th>
-                    <th
-                      className="px-4 py-3 text-right text-sm"
-                      style={{ color: "#000000" }}
-                    >
-                      Qty
-                    </th>
-                    <th
-                      className="px-4 py-3 text-right text-sm"
-                      style={{ color: "#000000" }}
-                    >
-                      Rate
-                    </th>
-                    <th
-                      className="px-4 py-3 text-right text-sm"
-                      style={{ color: "#000000" }}
-                    >
-                      Total
-                    </th>
+                    <th className="px-4 py-3 text-left text-sm" style={{ color: "#000000" }}>Description</th>
+                    <th className="px-4 py-3 text-right text-sm" style={{ color: "#000000" }}>Qty</th>
+                    <th className="px-4 py-3 text-right text-sm" style={{ color: "#000000" }}>Rate</th>
+                    <th className="px-4 py-3 text-right text-sm" style={{ color: "#000000" }}>Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   {lineItems.length === 0 ? (
                     <tr>
-                      <td
-                        colSpan={4}
-                        className="px-4 py-4 text-sm"
-                        style={{ color: "#1f2937" }}
-                      >
+                      <td colSpan={4} className="px-4 py-4 text-sm" style={{ color: "#1f2937" }}>
                         No line items.
                       </td>
                     </tr>
                   ) : (
                     lineItems.map((item) => {
-                      const lineTotal =
-                        Number(item.quantity || 0) * Number(item.rate || 0);
+                      const lineTotal = Number(item.quantity || 0) * Number(item.rate || 0);
 
                       return (
                         <tr key={item.id} style={{ borderTop: "1px solid #d1d5db" }}>
-                          <td
-                            className="px-4 py-3 text-sm"
-                            style={{ color: "#111827" }}
-                          >
-                            {item.type}
-                          </td>
-                          <td
-                            className="px-4 py-3 text-right text-sm"
-                            style={{ color: "#111827" }}
-                          >
-                            {item.quantity}
-                          </td>
-                          <td
-                            className="px-4 py-3 text-right text-sm"
-                            style={{ color: "#111827" }}
-                          >
+                          <td className="px-4 py-3 text-sm" style={{ color: "#111827" }}>{item.type}</td>
+                          <td className="px-4 py-3 text-right text-sm" style={{ color: "#111827" }}>{item.quantity}</td>
+                          <td className="px-4 py-3 text-right text-sm" style={{ color: "#111827" }}>
                             {formatCurrency(Number(item.rate || 0))}
                           </td>
-                          <td
-                            className="px-4 py-3 text-right text-sm"
-                            style={{ color: "#111827" }}
-                          >
+                          <td className="px-4 py-3 text-right text-sm" style={{ color: "#111827" }}>
                             {formatCurrency(lineTotal)}
                           </td>
                         </tr>
@@ -462,18 +401,12 @@ export default function EstimatePrintPage() {
             </div>
 
             <div className="ml-auto mt-6 w-full max-w-sm space-y-2">
-              <div
-                className="flex items-center justify-between"
-                style={{ color: "#111827" }}
-              >
+              <div className="flex items-center justify-between" style={{ color: "#111827" }}>
                 <span>Subtotal</span>
                 <span>{formatCurrency(subtotal)}</span>
               </div>
 
-              <div
-                className="flex items-center justify-between"
-                style={{ color: "#111827" }}
-              >
+              <div className="flex items-center justify-between" style={{ color: "#111827" }}>
                 <span>Markup ({markupPercent}%)</span>
                 <span>{formatCurrency(markupAmount)}</span>
               </div>
@@ -488,15 +421,44 @@ export default function EstimatePrintPage() {
             </div>
           </div>
 
+          {photos.length > 0 && (
+            <div className="mb-8">
+              <h2 className="mb-4 text-xl font-bold" style={{ color: "#000000" }}>
+                Project Photos
+              </h2>
+
+              <div className="grid grid-cols-2 gap-4">
+                {photos.map((photo) => (
+                  <div
+                    key={photo.id}
+                    className="photo-card overflow-hidden rounded-xl"
+                    style={{
+                      border: "1px solid #d1d5db",
+                      backgroundColor: "#ffffff",
+                    }}
+                  >
+                    <img
+                      src={photo.image_url}
+                      alt={photo.caption || "Project photo"}
+                      className="h-64 w-full object-cover"
+                    />
+
+                    {photo.caption && (
+                      <div className="p-3">
+                        <p className="text-sm" style={{ color: "#111827" }}>
+                          {photo.caption}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {estimate.notes && (
-            <div
-              className="mb-6 rounded-xl p-4"
-              style={{ border: "1px solid #d1d5db", opacity: 1 }}
-            >
-              <p
-                className="mb-2 text-xs font-bold uppercase tracking-wide"
-                style={{ color: "#1f2937" }}
-              >
+            <div className="mb-6 rounded-xl p-4" style={{ border: "1px solid #d1d5db" }}>
+              <p className="mb-2 text-xs font-bold uppercase tracking-wide" style={{ color: "#1f2937" }}>
                 Notes
               </p>
               <p className="text-sm" style={{ color: "#111827" }}>
@@ -506,14 +468,8 @@ export default function EstimatePrintPage() {
           )}
 
           {estimate.exclusions && (
-            <div
-              className="mb-6 rounded-xl p-4"
-              style={{ border: "1px solid #d1d5db", opacity: 1 }}
-            >
-              <p
-                className="mb-2 text-xs font-bold uppercase tracking-wide"
-                style={{ color: "#1f2937" }}
-              >
+            <div className="mb-6 rounded-xl p-4" style={{ border: "1px solid #d1d5db" }}>
+              <p className="mb-2 text-xs font-bold uppercase tracking-wide" style={{ color: "#1f2937" }}>
                 Exclusions
               </p>
               <p className="text-sm" style={{ color: "#111827" }}>
@@ -523,30 +479,18 @@ export default function EstimatePrintPage() {
           )}
 
           {defaultTerms && (
-            <div
-              className="mb-10 rounded-xl p-4"
-              style={{ border: "1px solid #d1d5db", opacity: 1 }}
-            >
-              <p
-                className="mb-2 text-xs font-bold uppercase tracking-wide"
-                style={{ color: "#1f2937" }}
-              >
+            <div className="mb-10 rounded-xl p-4" style={{ border: "1px solid #d1d5db" }}>
+              <p className="mb-2 text-xs font-bold uppercase tracking-wide" style={{ color: "#1f2937" }}>
                 Terms
               </p>
-              <p
-                className="whitespace-pre-line text-sm"
-                style={{ color: "#111827" }}
-              >
+              <p className="whitespace-pre-line text-sm" style={{ color: "#111827" }}>
                 {defaultTerms}
               </p>
             </div>
           )}
 
           <div className="mt-16">
-            <p
-              className="mb-4 text-xs font-bold uppercase tracking-wide"
-              style={{ color: "#1f2937" }}
-            >
+            <p className="mb-4 text-xs font-bold uppercase tracking-wide" style={{ color: "#1f2937" }}>
               Acceptance
             </p>
             <p className="mb-10 text-sm" style={{ color: "#111827" }}>
@@ -556,19 +500,13 @@ export default function EstimatePrintPage() {
 
             <div className="flex flex-wrap gap-12">
               <div className="w-72">
-                <div
-                  className="pt-2 text-sm"
-                  style={{ borderTop: "1px solid #000000", color: "#111827" }}
-                >
+                <div className="pt-2 text-sm" style={{ borderTop: "1px solid #000000", color: "#111827" }}>
                   Customer Signature
                 </div>
               </div>
 
               <div className="w-48">
-                <div
-                  className="pt-2 text-sm"
-                  style={{ borderTop: "1px solid #000000", color: "#111827" }}
-                >
+                <div className="pt-2 text-sm" style={{ borderTop: "1px solid #000000", color: "#111827" }}>
                   Date
                 </div>
               </div>
