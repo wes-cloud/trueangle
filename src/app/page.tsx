@@ -1,210 +1,258 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
+
+const beforeAfterQuotes = [
+  {
+    before: "I was chasing receipts, guessing profit, and drowning in apps that weren’t built for construction.",
+    after: "Everything’s tied to the job. I know my numbers before it’s too late.",
+  },
+  {
+    before: "Estimates in one place, invoices in another, and expenses lost in the truck.",
+    after: "Estimates, invoices, expenses, and profit all live under the same roof.",
+  },
+  {
+    before: "I’d finish the job and just hope I made money.",
+    after: "Now I can see where the money went before the job eats me alive.",
+  },
+];
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen bg-white text-slate-950">
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-        <Link href="/" className="text-2xl font-black tracking-tight">
-          TrueAngle
-        </Link>
+    <main className="min-h-screen bg-neutral-950 text-white">
+      <section className="relative min-h-screen overflow-hidden">
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{
+            backgroundImage:
+              "url('https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=2400&q=80')",
+          }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-black via-black/80 to-black/35" />
+        <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-transparent to-black/30" />
 
-        <div className="flex items-center gap-3">
-          <Link
-            href="/auth"
-            className="text-sm font-semibold text-slate-700 hover:text-slate-950"
-          >
-            Sign in
+        <header className="relative z-10 mx-auto flex max-w-7xl items-center justify-between px-6 py-6">
+          <Link href="/" className="flex items-center gap-3">
+            <Image
+              src="/trueangle-icon.png"
+              alt="TrueAngle"
+              width={54}
+              height={54}
+              className="rounded-sm"
+            />
+            <div>
+              <p className="text-3xl font-black uppercase tracking-tight">
+                TrueAngle
+              </p>
+              <p className="-mt-1 text-sm font-black uppercase tracking-widest text-orange-500">
+                Built for contractors
+              </p>
+            </div>
           </Link>
 
-          <Link
-            href="/start-trial"
-            className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800"
-          >
-            Start Free Trial
-          </Link>
-        </div>
-      </header>
-
-      <section className="mx-auto max-w-6xl px-6 py-20">
-        <div className="max-w-3xl">
-          <p className="mb-4 inline-block rounded-full bg-slate-100 px-4 py-2 text-sm font-bold text-slate-700">
-            Built for contractors, not accountants
-          </p>
-
-          <h1 className="text-5xl font-black leading-tight tracking-tight md:text-6xl">
-            Estimates, approvals, invoices, and job numbers — without the
-            QuickBooks headache.
-          </h1>
-
-          <p className="mt-6 max-w-2xl text-xl font-medium leading-8 text-slate-600">
-            TrueAngle helps contractors send estimates, get client approval,
-            create invoices, track expenses, and see if the job actually made
-            money.
-          </p>
-
-          <div className="mt-8 flex flex-wrap gap-4">
-            <Link
-              href="/start-trial"
-              className="rounded-xl bg-slate-950 px-6 py-3 text-lg font-bold text-white hover:bg-slate-800"
-            >
-              Start Free 14-Day Trial
-            </Link>
-
-            <Link
-              href="/auth"
-              className="rounded-xl border border-slate-300 px-6 py-3 text-lg font-bold text-slate-900 hover:bg-slate-50"
-            >
+          <div className="flex items-center gap-4">
+            <Link href="/auth" className="font-bold text-white/90">
               Sign in
             </Link>
+
+            <Link
+              href="/start-trial"
+              className="rounded-sm bg-orange-500 px-5 py-3 font-black uppercase text-white shadow-lg shadow-black/40 hover:bg-orange-400"
+            >
+              Start Free Trial
+            </Link>
           </div>
+        </header>
 
-          <p className="mt-4 text-sm font-semibold text-slate-500">
-            No fluff. No bloated accounting maze. Just the stuff contractors
-            need to run jobs and get paid.
-          </p>
+        <div className="relative z-10 mx-auto flex max-w-7xl flex-col justify-center px-6 pb-20 pt-16 md:min-h-[760px]">
+          <div className="max-w-4xl">
+            <p className="mb-5 inline-block bg-orange-500 px-4 py-2 text-lg font-black uppercase tracking-wide text-black">
+              Built by a contractor.
+            </p>
+
+            <h1 className="max-w-4xl text-5xl font-black uppercase leading-[0.95] tracking-tight text-white drop-shadow-2xl md:text-7xl">
+              QuickBooks is like lotion on blue collar hands,
+              <span className="block text-orange-500">
+                it doesn’t fit on the jobsite.
+              </span>
+            </h1>
+
+            <p className="mt-6 max-w-2xl text-xl font-medium leading-8 text-white/90">
+              TrueAngle gives contractors the tools to estimate, track expenses,
+              send invoices, connect bank transactions, and know their numbers —
+              without the bloated accounting maze.
+            </p>
+
+            <div className="mt-8 flex flex-wrap gap-4">
+              <Link
+                href="/start-trial"
+                className="rounded-sm bg-orange-500 px-7 py-4 text-lg font-black uppercase text-white shadow-lg shadow-black/40 hover:bg-orange-400"
+              >
+                Start Free 14-Day Trial
+              </Link>
+
+              <Link
+                href="/auth"
+                className="rounded-sm border border-white/60 bg-black/30 px-7 py-4 text-lg font-black uppercase text-white backdrop-blur hover:bg-white/10"
+              >
+                Sign in
+              </Link>
+            </div>
+
+            <p className="mt-4 text-sm font-semibold text-white/75">
+              No credit card required. Cancel anytime.
+            </p>
+          </div>
         </div>
       </section>
 
-      <section className="px-6 py-16">
-  <div className="mx-auto max-w-4xl">
-    <h2 className="text-2xl font-bold text-center">
-      Why contractors switch to TrueAngle
-    </h2>
-
-    <div className="mt-10 grid gap-6 md:grid-cols-2">
-      
-      <div className="rounded-2xl border p-6">
-        <p className="text-sm font-semibold text-slate-500">Before</p>
-        <p className="mt-2 font-medium text-slate-800">
-          Estimates in one place, receipts somewhere else, invoices in another app.
-        </p>
-      </div>
-
-      <div className="rounded-2xl border p-6 bg-slate-50">
-        <p className="text-sm font-semibold text-slate-500">With TrueAngle</p>
-        <p className="mt-2 font-medium text-slate-900">
-          Estimates, expenses, invoices, and profit — all tied to the same job.
-        </p>
-      </div>
-
-      <div className="rounded-2xl border p-6">
-        <p className="text-sm font-semibold text-slate-500">Before</p>
-        <p className="mt-2 font-medium text-slate-800">
-          You finish a job and hope you made money.
-        </p>
-      </div>
-
-      <div className="rounded-2xl border p-6 bg-slate-50">
-        <p className="text-sm font-semibold text-slate-500">With TrueAngle</p>
-        <p className="mt-2 font-medium text-slate-900">
-          You know your profit before the job is even done.
-        </p>
-      </div>
-
-      <div className="rounded-2xl border p-6">
-        <p className="text-sm font-semibold text-slate-500">Before</p>
-        <p className="mt-2 font-medium text-slate-800">
-          Mileage, materials, and labor costs slip through the cracks.
-        </p>
-      </div>
-
-      <div className="rounded-2xl border p-6 bg-slate-50">
-        <p className="text-sm font-semibold text-slate-500">With TrueAngle</p>
-        <p className="mt-2 font-medium text-slate-900">
-          Every cost is tracked, tied to the job, and accounted for.
-        </p>
-      </div>
-
-      <div className="rounded-2xl border p-6">
-        <p className="text-sm font-semibold text-slate-500">Before</p>
-        <p className="mt-2 font-medium text-slate-800">
-          You spend time chasing numbers instead of running jobs.
-        </p>
-      </div>
-
-      <div className="rounded-2xl border p-6 bg-slate-50">
-        <p className="text-sm font-semibold text-slate-500">With TrueAngle</p>
-        <p className="mt-2 font-medium text-slate-900">
-          Your numbers are already there when you need them.
-        </p>
-      </div>
-
-    </div>
-  </div>
-</section>
-
-      <section className="mx-auto max-w-6xl px-6 py-16">
-        <h2 className="text-3xl font-black tracking-tight">
-          The contractor workflow, cleaned up.
-        </h2>
-
-        <div className="mt-8 grid gap-5 md:grid-cols-4">
-          <Step number="1" title="Create Estimate" />
-          <Step number="2" title="Client Approves" />
-          <Step number="3" title="Invoice Created" />
-          <Step number="4" title="Track Payment" />
+      <section className="border-y border-white/10 bg-[radial-gradient(circle_at_top,#2b2b2b,#080808)] px-6 py-10">
+        <div className="mx-auto grid max-w-7xl gap-6 md:grid-cols-5">
+          <Feature title="Estimate with confidence" text="Create clean, professional estimates in minutes." />
+          <Feature title="Get client approval" text="Send for approval and get a faster yes." />
+          <Feature title="Invoices that get paid" text="Create invoices and track payment." />
+          <Feature title="Track expenses by job" text="See every cost tied to the right project." />
+          <Feature title="Connect your bank" text="Transactions flow in. You stay in control." />
         </div>
       </section>
 
-      <section className="bg-slate-950 px-6 py-20 text-white">
-        <div className="mx-auto max-w-4xl text-center">
-          <h2 className="text-4xl font-black tracking-tight">
+      <section className="bg-stone-200 px-6 py-20 text-neutral-950">
+        <div className="mx-auto max-w-7xl">
+          <h2 className="text-center text-4xl font-black uppercase tracking-tight">
+            Why contractors switch to TrueAngle
+          </h2>
+
+          <div className="mt-10 flex gap-6 overflow-x-auto pb-6">
+            {beforeAfterQuotes.map((quote, index) => (
+              <div
+                key={index}
+                className="grid min-w-[720px] gap-6 md:grid-cols-2"
+              >
+                <QuoteCard label="Before" text={quote.before} dark />
+                <QuoteCard label="With TrueAngle" text={quote.after} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-neutral-950 px-6 py-20">
+        <div className="mx-auto max-w-7xl">
+          <h2 className="text-center text-4xl font-black uppercase tracking-tight">
+            The contractor workflow, cleaned up.
+          </h2>
+
+          <div className="mt-12 grid gap-8 md:grid-cols-4">
+            <Step number="1" title="Create Estimate" text="Build it. Send it." />
+            <Step number="2" title="Client Approves" text="They approve. You move forward." />
+            <Step number="3" title="Invoice Created" text="Automatic invoice. No double entry." />
+            <Step number="4" title="Get Paid" text="Track payment and keep cash moving." />
+          </div>
+        </div>
+      </section>
+
+      <section className="relative overflow-hidden px-6 py-24 text-center">
+        <div
+          className="absolute inset-0 bg-cover bg-center opacity-30"
+          style={{
+            backgroundImage:
+              "url('https://images.unsplash.com/photo-1581094794329-c8112a89af12?auto=format&fit=crop&w=2200&q=80')",
+          }}
+        />
+        <div className="absolute inset-0 bg-black/75" />
+
+        <div className="relative z-10 mx-auto max-w-4xl">
+          <h2 className="text-5xl font-black uppercase tracking-tight">
             Run the job. Know the numbers. Get paid.
           </h2>
 
-          <p className="mt-5 text-lg font-medium text-slate-300">
-            TrueAngle keeps the business side simple so contractors can stay
-            focused on the work.
+          <p className="mt-5 text-xl text-white/80">
+            Simple tools for contractors who build, fix, and get it done.
           </p>
 
           <Link
             href="/start-trial"
-            className="mt-8 inline-block rounded-xl bg-white px-6 py-3 text-lg font-bold text-slate-950 hover:bg-slate-200"
+            className="mt-8 inline-block rounded-sm bg-orange-500 px-8 py-4 text-lg font-black uppercase text-white hover:bg-orange-400"
           >
-            Start Free Trial
+            Start Free 14-Day Trial
           </Link>
+
+          <div className="mt-8 flex flex-wrap justify-center gap-6 text-sm font-bold uppercase text-white/70">
+            <span>Built for contractors</span>
+            <span>Easy to use</span>
+            <span>Know your profit</span>
+            <span>Get paid faster</span>
+          </div>
+
+          <div className="mt-8 flex justify-center gap-6 text-sm text-white/50">
+            <Link href="/privacy" className="hover:text-white">
+              Privacy
+            </Link>
+            <Link href="/terms" className="hover:text-white">
+              Terms
+            </Link>
+          </div>
         </div>
       </section>
-      {/* CTA */}
-<section className="bg-slate-900 px-6 py-20 text-center text-white">
-  <h2 className="text-3xl font-bold">
-    Run your business with confidence
-  </h2>
-
-  <p className="mt-4 text-slate-300">
-    Know your numbers. Price jobs better. Keep more money.
-  </p>
-
-  <Link
-    href="/start-trial"
-    className="mt-8 inline-block rounded-xl bg-white px-6 py-3 text-lg font-semibold text-slate-900 transition hover:bg-slate-200"
-  >
-    Start Free Trial
-  </Link>
-
-  <div className="mt-6 flex justify-center gap-6 text-sm text-slate-400">
-    <a href="/privacy" className="hover:text-white">
-      Privacy
-    </a>
-
-    <a href="/terms" className="hover:text-white">
-      Terms
-    </a>
-  </div>
-</section>
     </main>
   );
 }
 
-function Step({ number, title }: { number: string; title: string }) {
+function Feature({ title, text }: { title: string; text: string }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-slate-950 text-sm font-black text-white">
+    <div className="border-white/10 px-4 py-4 text-center md:border-r last:border-r-0">
+      <h3 className="text-lg font-black uppercase text-orange-500">{title}</h3>
+      <p className="mt-2 text-sm leading-6 text-white/75">{text}</p>
+    </div>
+  );
+}
+
+function QuoteCard({
+  label,
+  text,
+  dark = false,
+}: {
+  label: string;
+  text: string;
+  dark?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-sm p-8 shadow-xl ${
+        dark ? "bg-neutral-950 text-white" : "bg-white text-neutral-950"
+      }`}
+    >
+      <p
+        className={`inline-block px-3 py-1 text-sm font-black uppercase ${
+          dark ? "bg-white text-black" : "bg-orange-500 text-black"
+        }`}
+      >
+        {label}
+      </p>
+      <p className="mt-6 text-2xl font-bold leading-9">“{text}”</p>
+    </div>
+  );
+}
+
+function Step({
+  number,
+  title,
+  text,
+}: {
+  number: string;
+  title: string;
+  text: string;
+}) {
+  return (
+    <div className="text-center">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-orange-500 text-xl font-black text-black">
         {number}
       </div>
-      <h3 className="text-lg font-black text-slate-950">{title}</h3>
+      <h3 className="mt-5 text-xl font-black uppercase text-orange-500">
+        {title}
+      </h3>
+      <p className="mt-2 text-white/75">{text}</p>
     </div>
   );
 }
