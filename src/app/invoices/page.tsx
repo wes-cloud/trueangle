@@ -311,30 +311,62 @@ export default function InvoicesPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  async function handleDeleteInvoice(id: string) {
-    if (!user) {
-      setMessage("You must be signed in.");
-      return;
-    }
-
-    const { error } = await supabase
-      .from("invoices")
-      .delete()
-      .eq("id", id)
-      .eq("user_id", user.id);
-
-    if (error) {
-      setMessage(`Error deleting invoice: ${error.message}`);
-      return;
-    }
-
-    if (editingId === id) {
-      resetForm();
-    }
-
-    setMessage("Invoice deleted.");
-    await loadPageData(user.id);
+async function handleDeleteInvoice(id: string) {
+  if (!user) {
+    setMessage("You must be signed in.");
+    return;
   }
+
+  const confirmed = window.confirm(
+    "Delete this invoice? This will also delete any payments recorded for it."
+  );
+
+  if (!confirmed) return;
+
+  setMessage("Deleting invoice...");
+
+  const invoiceToDelete = invoices.find((invoice) => invoice.id === id);
+
+  const { error: paymentsError } = await supabase
+    .from("payments")
+    .delete()
+    .eq("invoice_id", id)
+    .eq("user_id", user.id);
+
+  if (paymentsError) {
+    setMessage(`Error deleting invoice payments: ${paymentsError.message}`);
+    return;
+  }
+
+  const { error: invoiceError } = await supabase
+    .from("invoices")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", user.id);
+
+  if (invoiceError) {
+    setMessage(`Error deleting invoice: ${invoiceError.message}`);
+    return;
+  }
+
+  if (invoiceToDelete?.estimate_id) {
+    await supabase
+      .from("estimates")
+      .update({
+        status: "approved",
+        converted_invoice_id: null,
+      })
+      .eq("id", invoiceToDelete.estimate_id)
+      .eq("user_id", user.id);
+  }
+
+  if (editingId === id) {
+    resetForm();
+  }
+
+  setMessage("Invoice deleted.");
+  await loadPageData(user.id);
+}
 
   async function handleSaveInvoice(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
