@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import AppNav from "@/components/AppNav";
@@ -51,6 +51,15 @@ type Expense = {
   customer_id: string | null;
   estimate_id: string | null;
   notes?: string | null;
+};
+
+type EstimatePhoto = {
+  id: string;
+  user_id: string;
+  estimate_id: string;
+  image_url: string;
+  caption: string | null;
+  created_at: string | null;
 };
 
 const defaultAgreementTerms = `This estimate is for the work listed above. By approving this estimate, the client confirms they have reviewed the scope and pricing and would like the contractor to move forward with scheduling the work.
@@ -121,15 +130,19 @@ export default function EstimateDetailPage() {
   const [loading, setLoading] = useState(true);
   const [statusLoading, setStatusLoading] = useState(false);
   const [savingApproval, setSavingApproval] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
   const [error, setError] = useState<string | null>(null);
   const [estimate, setEstimate] = useState<Estimate | null>(null);
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [photos, setPhotos] = useState<EstimatePhoto[]>([]);
+
   const [message, setMessage] = useState("");
   const [origin, setOrigin] = useState("");
-
   const [approvalRequired, setApprovalRequired] = useState(false);
   const [agreementTerms, setAgreementTerms] = useState("");
+  const [photoCaption, setPhotoCaption] = useState("");
 
   const approvalLink =
     origin && estimate?.approval_token
@@ -246,7 +259,21 @@ export default function EstimateDetailPage() {
       return;
     }
 
+    const { data: photoData, error: photoError } = await supabase
+      .from("estimate_photos")
+      .select("id, user_id, estimate_id, image_url, caption, created_at")
+      .eq("estimate_id", estimateId)
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
+
+    if (photoError) {
+      setError(photoError.message);
+      setLoading(false);
+      return;
+    }
+
     setExpenses((expenseData || []) as Expense[]);
+    setPhotos((photoData || []) as EstimatePhoto[]);
     setLoading(false);
   }
 
@@ -356,7 +383,9 @@ export default function EstimateDetailPage() {
       return;
     }
 
-    setMessage("Estimate is ready. Copy the approval link and send it to your client.");
+    setMessage(
+      "Estimate is ready. Copy the approval link and send it to your client."
+    );
     await loadData();
     setStatusLoading(false);
   }
@@ -429,7 +458,9 @@ export default function EstimateDetailPage() {
 
     if (createInvoiceError || !newInvoice) {
       setMessage(
-        `Error creating invoice: ${createInvoiceError?.message || "Unknown error"}`
+        `Error creating invoice: ${
+          createInvoiceError?.message || "Unknown error"
+        }`
       );
       setStatusLoading(false);
       return;
@@ -451,6 +482,98 @@ export default function EstimateDetailPage() {
     }
 
     window.location.href = `/invoices?invoice_id=${newInvoice.id}`;
+  }
+
+  async function handleUploadPhoto(event: ChangeEvent<HTMLInputElement>) {
+    if (!estimate) return;
+
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploadingPhoto(true);
+    setMessage("");
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setMessage("You must be signed in.");
+      setUploadingPhoto(false);
+      return;
+    }
+
+    const fileExt = file.name.split(".").pop() || "jpg";
+    const filePath = `${user.id}/${estimate.id}/${crypto.randomUUID()}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("estimate-photos")
+      .upload(filePath, file, {
+        cacheControl: "3600",
+        upsert: false,
+      });
+
+    if (uploadError) {
+      setMessage(`Photo upload failed: ${uploadError.message}`);
+      setUploadingPhoto(false);
+      return;
+    }
+
+    const { data: publicUrlData } = supabase.storage
+      .from("estimate-photos")
+      .getPublicUrl(filePath);
+
+    const { error: insertError } = await supabase
+      .from("estimate_photos")
+      .insert([
+        {
+          user_id: user.id,
+          estimate_id: estimate.id,
+          image_url: publicUrlData.publicUrl,
+          caption: photoCaption.trim() || null,
+        },
+      ]);
+
+    if (insertError) {
+      setMessage(
+        `Photo uploaded, but database save failed: ${insertError.message}`
+      );
+      setUploadingPhoto(false);
+      return;
+    }
+
+    event.target.value = "";
+    setPhotoCaption("");
+    setMessage("Photo added to estimate.");
+    await loadData();
+    setUploadingPhoto(false);
+  }
+
+  async function handleDeletePhoto(photo: EstimatePhoto) {
+    setMessage("");
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setMessage("You must be signed in.");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("estimate_photos")
+      .delete()
+      .eq("id", photo.id)
+      .eq("user_id", user.id);
+
+    if (error) {
+      setMessage(`Error deleting photo: ${error.message}`);
+      return;
+    }
+
+    setMessage("Photo deleted.");
+    await loadData();
   }
 
   async function handleSignOut() {
@@ -588,6 +711,12 @@ export default function EstimateDetailPage() {
           </div>
         </section>
 
+        {message && (
+          <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-200">
+            <p className="text-sm text-gray-900">{message}</p>
+          </section>
+        )}
+
         <section className="grid gap-4 md:grid-cols-3">
           <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-200">
             <p className="text-sm text-gray-700">Estimate Total</p>
@@ -665,8 +794,6 @@ export default function EstimateDetailPage() {
             invoice, use the client approval link or the “Convert to Invoice”
             button.
           </p>
-
-          {message && <p className="mt-4 text-sm text-gray-900">{message}</p>}
         </section>
 
         <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
@@ -784,7 +911,10 @@ export default function EstimateDetailPage() {
               label="Markup"
               value={`${Number(estimate.markup_percent || 0)}%`}
             />
-            <InfoRow label="Valid Until" value={formatDate(estimate.valid_until)} />
+            <InfoRow
+              label="Valid Until"
+              value={formatDate(estimate.valid_until)}
+            />
             <InfoRow label="Notes" value={estimate.notes} />
             <InfoRow label="Exclusions" value={estimate.exclusions} />
           </div>
@@ -804,8 +934,14 @@ export default function EstimateDetailPage() {
             ) : (
               <>
                 <p className="text-gray-800">No linked customer record found.</p>
-                <InfoRow label="Estimate Email" value={estimate.customer_email} />
-                <InfoRow label="Estimate Phone" value={estimate.customer_phone} />
+                <InfoRow
+                  label="Estimate Email"
+                  value={estimate.customer_email}
+                />
+                <InfoRow
+                  label="Estimate Phone"
+                  value={estimate.customer_phone}
+                />
                 <InfoRow
                   label="Estimate Address"
                   value={estimate.customer_address}
@@ -813,6 +949,78 @@ export default function EstimateDetailPage() {
               </>
             )}
           </div>
+        </section>
+
+        <section className="space-y-5 rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900">
+              Project Photos
+            </h2>
+            <p className="mt-1 text-sm text-gray-600">
+              Add jobsite, before/after, material, or reference photos to make
+              your estimate more visual and professional.
+            </p>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+            <input
+              type="text"
+              value={photoCaption}
+              onChange={(event) => setPhotoCaption(event.target.value)}
+              placeholder="Optional caption, like Before photo, Material option, or Finished example"
+              className="rounded-xl border border-gray-300 p-3 text-gray-900"
+            />
+
+            <label
+              className={`rounded-xl px-4 py-3 text-center text-white ${
+                uploadingPhoto
+                  ? "cursor-not-allowed bg-gray-400"
+                  : "cursor-pointer bg-black hover:bg-gray-800"
+              }`}
+            >
+              {uploadingPhoto ? "Uploading..." : "+ Add Photo"}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleUploadPhoto}
+                disabled={uploadingPhoto}
+                className="hidden"
+              />
+            </label>
+          </div>
+
+          {photos.length === 0 ? (
+            <p className="text-gray-800">No photos added yet.</p>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-3">
+              {photos.map((photo) => (
+                <div
+                  key={photo.id}
+                  className="overflow-hidden rounded-2xl border border-gray-200 bg-white"
+                >
+                  <img
+                    src={photo.image_url}
+                    alt={photo.caption || "Estimate photo"}
+                    className="h-48 w-full object-cover"
+                  />
+
+                  <div className="space-y-3 p-4">
+                    <p className="text-sm text-gray-800">
+                      {photo.caption || "No caption"}
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDeletePhoto(photo)}
+                      className="text-sm font-medium text-red-600 hover:underline"
+                    >
+                      Delete photo
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="space-y-4 rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
@@ -842,7 +1050,9 @@ export default function EstimateDetailPage() {
                 >
                   <div>
                     <p className="font-medium text-gray-900">
-                      {expense.description || expense.vendor || "Untitled expense"}
+                      {expense.description ||
+                        expense.vendor ||
+                        "Untitled expense"}
                     </p>
                     <p className="text-sm text-gray-800">
                       Category: {expense.category || "Uncategorized"}
