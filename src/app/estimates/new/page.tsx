@@ -46,6 +46,10 @@ type LineItem = {
   quantity: number;
   rate: number;
   show_quantity_rate?: boolean | null;
+  tax_enabled?: boolean | null;
+  tax_label?: string | null;
+  tax_rate?: number | null;
+  tax_amount?: number | null;
 };
 
 type Customer = {
@@ -102,6 +106,9 @@ type DraftLineItem = {
   rate: string;
   unit: string;
   showQuantityRate: boolean;
+  taxEnabled: boolean;
+  taxLabel: string;
+  taxRate: string;
   saveAsPreset: boolean;
 };
 
@@ -142,17 +149,20 @@ function getEstimateExpenseTotal(expenses: Expense[], estimateId: string) {
 }
 
 function makeDefaultLineItem(): DraftLineItem {
-return {
-  id: Date.now() + Math.floor(Math.random() * 10000),
-  mode: "preset",
-  type: "Framing",
-  description: "",
-  quantity: "",
-  rate: defaultLaborRates.Framing.rate.toString(),
-  unit: defaultLaborRates.Framing.unit,
-  showQuantityRate: true,
-  saveAsPreset: false,
-};
+  return {
+    id: Date.now() + Math.floor(Math.random() * 10000),
+    mode: "preset",
+    type: "Framing",
+    description: "",
+    quantity: "",
+    rate: defaultLaborRates.Framing.rate.toString(),
+    unit: defaultLaborRates.Framing.unit,
+    showQuantityRate: true,
+    taxEnabled: false,
+    taxLabel: "Sales Tax",
+    taxRate: "0",
+    saveAsPreset: false,
+  };
 }
 
 export default function EstimatesNewPage() {
@@ -185,9 +195,6 @@ export default function EstimatesNewPage() {
   const [markupPercent, setMarkupPercent] = useState("0");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
-  const [taxEnabled, setTaxEnabled] = useState(false);
-const [taxLabel, setTaxLabel] = useState("Sales Tax");
-const [taxRate, setTaxRate] = useState("0");
 
   const [lineItems, setLineItems] = useState<DraftLineItem[]>([
     makeDefaultLineItem(),
@@ -218,11 +225,15 @@ const [taxRate, setTaxRate] = useState("0");
 
   const markupAmount = costTotal * (Number(markupPercent || 0) / 100);
   const sellingPrice = costTotal + markupAmount;
-  const taxAmount = taxEnabled
-  ? sellingPrice * (Number(taxRate || 0) / 100)
-  : 0;
 
-const finalTotal = sellingPrice + taxAmount;
+  const lineItemTaxTotal = lineItems.reduce((sum, item) => {
+    if (!item.taxEnabled) return sum;
+
+    const lineTotal = Number(item.quantity || 0) * Number(item.rate || 0);
+    return sum + lineTotal * (Number(item.taxRate || 0) / 100);
+  }, 0);
+
+  const finalTotal = sellingPrice + lineItemTaxTotal;
 
   function resetForm() {
     setSelectedCustomerId("");
@@ -238,9 +249,6 @@ const finalTotal = sellingPrice + taxAmount;
     setValidUntil("");
     setEstimateNumber(buildEstimateNumber());
     setMarkupPercent("0");
-    setTaxEnabled(false);
-setTaxLabel("Sales Tax");
-setTaxRate("0");
     setEditingId(null);
     setLineItems([makeDefaultLineItem()]);
   }
@@ -599,7 +607,9 @@ setTaxRate("0");
         default_unit: item.unit || "flat amount",
         updated_at: new Date().toISOString(),
       }))
-      .filter((item) => item.name && !existingNames.has(item.name.toLowerCase()));
+      .filter(
+        (item) => item.name && !existingNames.has(item.name.toLowerCase())
+      );
 
     if (presetsToInsert.length === 0) return;
 
@@ -608,7 +618,9 @@ setTaxRate("0");
       .insert(presetsToInsert);
 
     if (error) {
-      throw new Error(`Estimate saved, but reusable type failed: ${error.message}`);
+      throw new Error(
+        `Estimate saved, but reusable type failed: ${error.message}`
+      );
     }
   }
 
@@ -620,14 +632,27 @@ setTaxRate("0");
       return;
     }
 
-const cleanedLineItems = lineItems
-  .map((item) => ({
-    type: item.type.trim(),
-    description: item.description.trim(),
-    quantity: Number(item.quantity || 0),
-    rate: Number(item.rate || 0),
-    show_quantity_rate: item.showQuantityRate,
-  }))
+    const cleanedLineItems = lineItems
+      .map((item) => {
+        const quantity = Number(item.quantity || 0);
+        const rate = Number(item.rate || 0);
+        const lineTotal = quantity * rate;
+        const taxAmount = item.taxEnabled
+          ? lineTotal * (Number(item.taxRate || 0) / 100)
+          : 0;
+
+        return {
+          type: item.type.trim(),
+          description: item.description.trim(),
+          quantity,
+          rate,
+          show_quantity_rate: item.showQuantityRate,
+          tax_enabled: item.taxEnabled,
+          tax_label: item.taxLabel,
+          tax_rate: Number(item.taxRate || 0),
+          tax_amount: taxAmount,
+        };
+      })
       .filter((item) => item.type && item.quantity > 0);
 
     if (cleanedLineItems.length === 0) {
@@ -666,10 +691,10 @@ const cleanedLineItems = lineItems
       valid_until: validUntil || null,
       estimate_number: estimateNumber,
       amount: finalTotal,
-tax_enabled: taxEnabled,
-tax_label: taxLabel,
-tax_rate: Number(taxRate || 0),
-tax_amount: taxAmount,
+      tax_enabled: lineItemTaxTotal > 0,
+      tax_label: "Line Item Tax",
+      tax_rate: 0,
+      tax_amount: lineItemTaxTotal,
       markup_percent: Number(markupPercent),
     };
 
@@ -698,11 +723,15 @@ tax_amount: taxAmount,
 
         const itemsToInsert = cleanedLineItems.map((item) => ({
           estimate_id: editingId,
-type: item.type,
-description: item.description,
-quantity: item.quantity,
-rate: item.rate,
-show_quantity_rate: item.show_quantity_rate,
+          type: item.type,
+          description: item.description,
+          quantity: item.quantity,
+          rate: item.rate,
+          show_quantity_rate: item.show_quantity_rate,
+          tax_enabled: item.tax_enabled,
+          tax_label: item.tax_label,
+          tax_rate: item.tax_rate,
+          tax_amount: item.tax_amount,
         }));
 
         const { error: insertNewItemsError } = await supabase
@@ -738,11 +767,15 @@ show_quantity_rate: item.show_quantity_rate,
 
       const itemsToInsert = cleanedLineItems.map((item) => ({
         estimate_id: estimateData.id,
-type: item.type,
-description: item.description,
-quantity: item.quantity,
-rate: item.rate,
-show_quantity_rate: item.show_quantity_rate,
+        type: item.type,
+        description: item.description,
+        quantity: item.quantity,
+        rate: item.rate,
+        show_quantity_rate: item.show_quantity_rate,
+        tax_enabled: item.tax_enabled,
+        tax_label: item.tax_label,
+        tax_rate: item.tax_rate,
+        tax_amount: item.tax_amount,
       }));
 
       const { error: itemsError } = await supabase
@@ -783,21 +816,24 @@ show_quantity_rate: item.show_quantity_rate,
     setSelectedCustomerId(estimate.customer_id || "");
     setIsNewCustomer(!estimate.customer_id);
 
-const mappedLineItems: DraftLineItem[] = estimate.line_items.map((item) => {
-  const isSavedPreset = Boolean(presetOptions[item.type]);
+    const mappedLineItems: DraftLineItem[] = estimate.line_items.map((item) => {
+      const isSavedPreset = Boolean(presetOptions[item.type]);
 
-  return {
-    id: Date.now() + Math.floor(Math.random() * 10000),
-    mode: isSavedPreset ? "preset" : "custom",
-    type: item.type,
-    description: item.description || "",
-    quantity: String(item.quantity),
-    rate: String(item.rate),
-    unit: presetOptions[item.type]?.unit || "flat amount",
-    showQuantityRate: item.show_quantity_rate ?? true,
-    saveAsPreset: false,
-  };
-});
+      return {
+        id: Date.now() + Math.floor(Math.random() * 10000),
+        mode: isSavedPreset ? "preset" : "custom",
+        type: item.type,
+        description: item.description || "",
+        quantity: String(item.quantity),
+        rate: String(item.rate),
+        unit: presetOptions[item.type]?.unit || "flat amount",
+        showQuantityRate: item.show_quantity_rate ?? true,
+        taxEnabled: item.tax_enabled ?? false,
+        taxLabel: item.tax_label || "Sales Tax",
+        taxRate: String(item.tax_rate || 0),
+        saveAsPreset: false,
+      };
+    });
 
     setLineItems(
       mappedLineItems.length > 0 ? mappedLineItems : [makeDefaultLineItem()]
@@ -916,6 +952,7 @@ const mappedLineItems: DraftLineItem[] = estimate.line_items.map((item) => {
           <h1 className="text-3xl font-bold text-gray-900">
             {editingId ? "Edit Estimate" : "Create Estimate"}
           </h1>
+
           <p className="mt-1 text-sm text-gray-600">
             Signed in as {user.email || "User"}
           </p>
@@ -1012,6 +1049,7 @@ const mappedLineItems: DraftLineItem[] = estimate.line_items.map((item) => {
                 <label className="mb-1 block text-sm font-medium text-gray-900">
                   Markup %
                 </label>
+
                 <input
                   type="number"
                   value={markupPercent}
@@ -1024,6 +1062,7 @@ const mappedLineItems: DraftLineItem[] = estimate.line_items.map((item) => {
                 <label className="mb-1 block text-sm font-medium text-gray-900">
                   Valid Until
                 </label>
+
                 <input
                   type="date"
                   value={validUntil}
@@ -1035,15 +1074,23 @@ const mappedLineItems: DraftLineItem[] = estimate.line_items.map((item) => {
 
             <div className="space-y-4">
               <div>
-                <h2 className="text-2xl font-bold text-gray-900">Line Items</h2>
+                <h2 className="text-2xl font-bold text-gray-900">
+                  Line Items
+                </h2>
+
                 <p className="mt-1 text-sm text-gray-600">
-                  Pick a saved type or choose Custom to add your own. Custom types can be saved for future estimates.
+                  Add work items, descriptions, visibility settings, and taxes
+                  per line item.
                 </p>
               </div>
 
               {lineItems.map((item, index) => {
                 const lineTotal =
                   Number(item.quantity || 0) * Number(item.rate || 0);
+
+                const itemTax = item.taxEnabled
+                  ? lineTotal * (Number(item.taxRate || 0) / 100)
+                  : 0;
 
                 const presetNames = Object.keys(presetOptions);
 
@@ -1069,13 +1116,15 @@ const mappedLineItems: DraftLineItem[] = estimate.line_items.map((item) => {
                     </div>
 
                     <div className="grid gap-4 md:grid-cols-4">
-                      <div>
+                      <div className="md:col-span-2">
                         <label className="mb-1 block text-sm font-medium text-gray-900">
                           Work Type
                         </label>
 
                         <select
-                          value={item.mode === "custom" ? "__custom__" : item.type}
+                          value={
+                            item.mode === "custom" ? "__custom__" : item.type
+                          }
                           onChange={(e) => {
                             const nextValue = e.target.value;
 
@@ -1102,7 +1151,10 @@ const mappedLineItems: DraftLineItem[] = estimate.line_items.map((item) => {
                               type="text"
                               value={item.type}
                               onChange={(e) =>
-                                updateCustomLineItemName(item.id, e.target.value)
+                                updateCustomLineItemName(
+                                  item.id,
+                                  e.target.value
+                                )
                               }
                               placeholder="Example: Tile Shower Pan"
                               className="mt-2 w-full rounded-lg border p-3 text-gray-900"
@@ -1140,40 +1192,11 @@ const mappedLineItems: DraftLineItem[] = estimate.line_items.map((item) => {
                         </p>
                       </div>
 
-<div className="md:col-span-4">
-  <label className="mb-1 block text-sm font-medium text-gray-900">
-    Description
-  </label>
-
-  <textarea
-    value={item.description}
-    onChange={(e) =>
-      updateLineItem(item.id, "description", e.target.value)
-    }
-    placeholder="Optional details shown to customer"
-    className="min-h-[90px] w-full rounded-lg border p-3 text-gray-900"
-  />
-
-  <label className="mt-3 flex items-center gap-2 text-sm text-gray-700">
-    <input
-      type="checkbox"
-      checked={item.showQuantityRate}
-      onChange={(e) =>
-        updateLineItem(
-          item.id,
-          "showQuantityRate",
-          e.target.checked
-        )
-      }
-    />
-    Show quantity and rate to customer
-  </label>
-</div>
-
                       <div>
                         <label className="mb-1 block text-sm font-medium text-gray-900">
                           Quantity
                         </label>
+
                         <input
                           type="number"
                           value={item.quantity}
@@ -1188,6 +1211,7 @@ const mappedLineItems: DraftLineItem[] = estimate.line_items.map((item) => {
                         <label className="mb-1 block text-sm font-medium text-gray-900">
                           Rate
                         </label>
+
                         <input
                           type="number"
                           value={item.rate}
@@ -1198,12 +1222,130 @@ const mappedLineItems: DraftLineItem[] = estimate.line_items.map((item) => {
                         />
                       </div>
 
-                      <div>
+                      <div className="md:col-span-4">
                         <label className="mb-1 block text-sm font-medium text-gray-900">
-                          Line Total
+                          Description
                         </label>
+
+                        <textarea
+                          value={item.description}
+                          onChange={(e) =>
+                            updateLineItem(
+                              item.id,
+                              "description",
+                              e.target.value
+                            )
+                          }
+                          placeholder="Optional details shown to customer"
+                          className="min-h-[90px] w-full rounded-lg border p-3 text-gray-900"
+                        />
+
+                        <label className="mt-3 flex items-center gap-2 text-sm text-gray-700">
+                          <input
+                            type="checkbox"
+                            checked={item.showQuantityRate}
+                            onChange={(e) =>
+                              updateLineItem(
+                                item.id,
+                                "showQuantityRate",
+                                e.target.checked
+                              )
+                            }
+                          />
+                          Show quantity and rate to customer
+                        </label>
+                      </div>
+
+                      <div className="md:col-span-4 rounded-xl border border-gray-200 p-4">
+                        <label className="flex items-center gap-2 text-sm font-medium text-gray-900">
+                          <input
+                            type="checkbox"
+                            checked={item.taxEnabled}
+                            onChange={(e) =>
+                              updateLineItem(
+                                item.id,
+                                "taxEnabled",
+                                e.target.checked
+                              )
+                            }
+                          />
+                          Apply Tax To This Item
+                        </label>
+
+                        {item.taxEnabled && (
+                          <div className="mt-4 grid gap-4 md:grid-cols-2">
+                            <div>
+                              <label className="mb-1 block text-sm font-medium text-gray-900">
+                                Tax Type
+                              </label>
+
+                              <select
+                                value={item.taxLabel}
+                                onChange={(e) =>
+                                  updateLineItem(
+                                    item.id,
+                                    "taxLabel",
+                                    e.target.value
+                                  )
+                                }
+                                className="w-full rounded-lg border p-3 text-gray-900"
+                              >
+                                <option>Sales Tax</option>
+                                <option>Service Tax</option>
+                                <option>Materials Tax</option>
+                                <option>Local Tax</option>
+                                <option>Other</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="mb-1 block text-sm font-medium text-gray-900">
+                                Tax Rate %
+                              </label>
+
+                              <input
+                                type="number"
+                                value={item.taxRate}
+                                onChange={(e) =>
+                                  updateLineItem(
+                                    item.id,
+                                    "taxRate",
+                                    e.target.value
+                                  )
+                                }
+                                className="w-full rounded-lg border p-3 text-gray-900"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="md:col-span-4 grid gap-3 md:grid-cols-3">
                         <div className="rounded-lg border bg-gray-50 p-3 text-gray-900">
-                          {formatCurrency(lineTotal)}
+                          <p className="text-xs uppercase tracking-wide text-gray-500">
+                            Line Total
+                          </p>
+                          <p className="font-semibold">
+                            {formatCurrency(lineTotal)}
+                          </p>
+                        </div>
+
+                        <div className="rounded-lg border bg-gray-50 p-3 text-gray-900">
+                          <p className="text-xs uppercase tracking-wide text-gray-500">
+                            Tax
+                          </p>
+                          <p className="font-semibold">
+                            {formatCurrency(itemTax)}
+                          </p>
+                        </div>
+
+                        <div className="rounded-lg border bg-gray-50 p-3 text-gray-900">
+                          <p className="text-xs uppercase tracking-wide text-gray-500">
+                            Line + Tax
+                          </p>
+                          <p className="font-semibold">
+                            {formatCurrency(lineTotal + itemTax)}
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -1236,75 +1378,16 @@ const mappedLineItems: DraftLineItem[] = estimate.line_items.map((item) => {
               />
             </div>
 
-<div className="rounded-xl border border-gray-200 p-4">
-  <div className="flex items-center gap-2">
-    <input
-      type="checkbox"
-      checked={taxEnabled}
-      onChange={(e) => setTaxEnabled(e.target.checked)}
-    />
+            <div className="space-y-2 rounded-xl bg-gray-50 p-4 text-gray-900">
+              <p>Cost Total: {formatCurrency(costTotal)}</p>
+              <p>Markup Amount: {formatCurrency(markupAmount)}</p>
+              <p>Subtotal: {formatCurrency(sellingPrice)}</p>
+              <p>Total Tax: {formatCurrency(lineItemTaxTotal)}</p>
 
-    <label className="font-medium text-gray-900">
-      Apply Tax
-    </label>
-  </div>
-
-  {taxEnabled && (
-    <div className="mt-4 grid gap-4 md:grid-cols-2">
-      <div>
-        <label className="mb-1 block text-sm font-medium text-gray-900">
-          Tax Type
-        </label>
-
-        <select
-          value={taxLabel}
-          onChange={(e) => setTaxLabel(e.target.value)}
-          className="w-full rounded-lg border p-3 text-gray-900"
-        >
-          <option>Sales Tax</option>
-          <option>Service Tax</option>
-          <option>Materials Tax</option>
-          <option>Local Tax</option>
-          <option>Other</option>
-        </select>
-      </div>
-
-      <div>
-        <label className="mb-1 block text-sm font-medium text-gray-900">
-          Tax Rate %
-        </label>
-
-        <input
-          type="number"
-          value={taxRate}
-          onChange={(e) => setTaxRate(e.target.value)}
-          className="w-full rounded-lg border p-3 text-gray-900"
-        />
-      </div>
-    </div>
-  )}
-</div>
-
-<div className="space-y-2 rounded-xl bg-gray-50 p-4 text-gray-900">
-  <p>Cost Total: {formatCurrency(costTotal)}</p>
-
-  <p>Markup Amount: {formatCurrency(markupAmount)}</p>
-
-  <p>
-    Subtotal: {formatCurrency(sellingPrice)}
-  </p>
-
-  {taxEnabled && (
-    <p>
-      {taxLabel} ({taxRate}%):{" "}
-      {formatCurrency(taxAmount)}
-    </p>
-  )}
-
-  <p className="text-xl font-bold">
-    Total: {formatCurrency(finalTotal)}
-  </p>
-</div>
+              <p className="text-xl font-bold">
+                Total: {formatCurrency(finalTotal)}
+              </p>
+            </div>
 
             <div className="flex gap-3">
               <button
@@ -1357,7 +1440,10 @@ const mappedLineItems: DraftLineItem[] = estimate.line_items.map((item) => {
                 const subtotal = getLineItemsTotal(estimate.line_items);
                 const markup =
                   subtotal * (Number(estimate.markup_percent ?? 0) / 100);
-                const expenseTotal = getEstimateExpenseTotal(expenses, estimate.id);
+                const expenseTotal = getEstimateExpenseTotal(
+                  expenses,
+                  estimate.id
+                );
                 const estimatedProfit =
                   Number(estimate.amount || 0) - expenseTotal;
 
@@ -1368,7 +1454,9 @@ const mappedLineItems: DraftLineItem[] = estimate.line_items.map((item) => {
                   >
                     <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                       <div>
-                        <p className="text-lg font-bold">{estimate.customer_name}</p>
+                        <p className="text-lg font-bold">
+                          {estimate.customer_name}
+                        </p>
                         <p>{estimate.job_name}</p>
                         <p className="text-sm text-gray-600">
                           Estimate #: {estimate.estimate_number || "—"}
@@ -1391,7 +1479,9 @@ const mappedLineItems: DraftLineItem[] = estimate.line_items.map((item) => {
                         <p className="text-xs uppercase tracking-wide text-gray-500">
                           Subtotal
                         </p>
-                        <p className="font-semibold">{formatCurrency(subtotal)}</p>
+                        <p className="font-semibold">
+                          {formatCurrency(subtotal)}
+                        </p>
                       </div>
 
                       <div className="rounded-lg bg-gray-50 p-3">
