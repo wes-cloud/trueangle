@@ -90,6 +90,8 @@ export default function DashboardPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [transactions, setTransactions] = useState<PlaidTransaction[]>([]);
+const [connectedBanks, setConnectedBanks] = useState(0);
+const [connectedAccounts, setConnectedAccounts] = useState(0);
 
   function clearDashboardState() {
     setCompanyId(null);
@@ -150,14 +152,16 @@ export default function DashboardPage() {
     setCompanyRole(access.role);
     setCompanyUserIds(access.userIds);
 
-    const [
-      expensesResult,
-      incomeResult,
-      paymentsResult,
-      invoicesResult,
-      estimatesResult,
-      transactionsResult,
-    ] = await Promise.all([
+const [
+  expensesResult,
+  incomeResult,
+  paymentsResult,
+  invoicesResult,
+  estimatesResult,
+  transactionsResult,
+  plaidItemsResult,
+  plaidAccountsResult,
+] = await Promise.all([
       supabase
         .from("expenses")
         .select("id, amount, category")
@@ -189,6 +193,15 @@ export default function DashboardPage() {
           "id, amount, imported_to_expenses, imported_to_income, ignored, match_status"
         )
         .in("user_id", access.userIds),
+        supabase
+  .from("plaid_items")
+  .select("plaid_item_id")
+  .in("user_id", access.userIds),
+
+supabase
+  .from("plaid_accounts")
+  .select("plaid_account_id")
+  .in("user_id", access.userIds),
     ]);
 
     if (expensesResult.error) {
@@ -223,6 +236,8 @@ export default function DashboardPage() {
     setInvoices((invoicesResult.data || []) as Invoice[]);
     setEstimates((estimatesResult.data || []) as Estimate[]);
     setTransactions((transactionsResult.data || []) as PlaidTransaction[]);
+    setConnectedBanks((plaidItemsResult.data || []).length);
+setConnectedAccounts((plaidAccountsResult.data || []).length);
   }
 
   async function refreshDashboard(currentUserId?: string) {
@@ -600,6 +615,54 @@ export default function DashboardPage() {
       <div className="mx-auto max-w-7xl space-y-8">
         <OnboardingChecklist />
 
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+  <a
+    href="/banking"
+    className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200 transition hover:-translate-y-1 hover:shadow-lg"
+  >
+    <p className="text-sm font-bold uppercase tracking-wide text-slate-500">
+      Banking
+    </p>
+
+    <h2 className="mt-2 text-2xl font-black text-slate-950">
+      {connectedBanks > 0
+        ? `${connectedBanks} Bank${connectedBanks === 1 ? "" : "s"} Connected`
+        : "Connect Your First Bank"}
+    </h2>
+
+    <p className="mt-2 text-sm font-medium text-slate-600">
+      {connectedBanks > 0
+        ? `${connectedAccounts} account${connectedAccounts === 1 ? "" : "s"} syncing transactions automatically.`
+        : "Automatically import expenses, invoice payments, and account activity."}
+    </p>
+
+    <div className="mt-5 inline-flex rounded-xl bg-slate-950 px-4 py-2 text-sm font-bold text-white">
+      {connectedBanks > 0 ? "Manage Banks" : "Connect Bank"}
+    </div>
+  </a>
+
+  <a
+    href="/banking/transactions"
+    className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200 transition hover:-translate-y-1 hover:shadow-lg"
+  >
+    <p className="text-sm font-bold uppercase tracking-wide text-slate-500">
+      Transactions
+    </p>
+
+    <h2 className="mt-2 text-2xl font-black text-slate-950">
+      {totals.bankTransactionsToReview}
+    </h2>
+
+    <p className="mt-2 text-sm font-medium text-slate-600">
+      Transactions waiting for review, matching, or categorization.
+    </p>
+
+    <div className="mt-5 inline-flex rounded-xl bg-slate-950 px-4 py-2 text-sm font-bold text-white">
+      Review Transactions
+    </div>
+  </a>
+</section>
+
         {companyRole && companyRole !== "owner" && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
             <p className="text-sm font-semibold text-slate-900">
@@ -637,7 +700,7 @@ export default function DashboardPage() {
                     disabled={workingSampleData}
                     className="rounded-xl bg-white px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {workingSampleData ? "Working..." : "Add Sample Data"}
+                    {workingSampleData ? "Working..." : "Load Demo Job"}
                   </button>
                 ) : (
                   <>
@@ -662,7 +725,7 @@ export default function DashboardPage() {
                   disabled={workingSampleData}
                   className="rounded-xl border border-white/30 px-5 py-3 text-sm font-black text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {workingSampleData ? "Working..." : "Clear Sample Data"}
+                  {workingSampleData ? "Working..." : "Clear Demo Data"}
                 </button>
               </div>
             </div>
