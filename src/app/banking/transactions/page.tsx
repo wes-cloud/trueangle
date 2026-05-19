@@ -131,6 +131,99 @@ function normalizeVendorName(value?: string | null) {
   return (value || "").trim().toLowerCase();
 }
 
+function getSmartCategorySuggestion(vendorName: string) {
+  const vendor = normalizeVendorName(vendorName);
+
+  const rules = [
+    {
+      keywords: [
+        "home depot",
+        "lowes",
+        "lumber",
+        "builders firstsource",
+        "84 lumber",
+      ],
+      category: "Materials",
+    },
+
+    {
+      keywords: [
+        "sherwin",
+        "benjamin moore",
+        "paint",
+      ],
+      category: "Materials",
+    },
+
+    {
+      keywords: [
+        "shell",
+        "chevron",
+        "76",
+        "arco",
+        "costco gas",
+        "texaco",
+      ],
+      category: "Fuel",
+    },
+
+    {
+      keywords: [
+        "amazon",
+        "harbor freight",
+        "northern tool",
+        "fastenal",
+      ],
+      category: "Tools / Small Equipment",
+    },
+
+    {
+      keywords: [
+        "mcdonald",
+        "starbucks",
+        "subway",
+        "chipotle",
+        "taco bell",
+        "restaurant",
+      ],
+      category: "Meals",
+    },
+
+    {
+      keywords: [
+        "microsoft",
+        "google",
+        "openai",
+        "vercel",
+        "github",
+        "adobe",
+        "quickbooks",
+      ],
+      category: "Software / Subscriptions",
+    },
+
+    {
+      keywords: [
+        "uhaul",
+        "storage",
+      ],
+      category: "Rent / Storage",
+    },
+  ];
+
+  for (const rule of rules) {
+    const matched = rule.keywords.some((keyword) =>
+      vendor.includes(keyword)
+    );
+
+    if (matched) {
+      return rule.category;
+    }
+  }
+
+  return "";
+}
+
 function getTransactionVendor(transaction: PlaidTransaction) {
   return (
     transaction.merchant_name?.trim() ||
@@ -460,12 +553,16 @@ export default function BankingTransactionsPage() {
             safeVendorMemory
           );
 
+          const smartSuggestion =
+  rememberedCategory ||
+  getSmartCategorySuggestion(getTransactionVendor(txn));
+
           nextDrafts[txn.id] = {
-            category: rememberedCategory,
+            category: smartSuggestion,
             customerId: "",
             estimateId: "",
             notes: "",
-            suggestedFromMemory: !!rememberedCategory,
+            suggestedFromMemory: !!smartSuggestion,
           };
         }
       });
@@ -1016,7 +1113,7 @@ export default function BankingTransactionsPage() {
                             {draft.suggestedFromMemory &&
                               isExpense(transaction) && (
                                 <p className="mt-1 text-sm font-medium text-green-700">
-                                  Category suggested from vendor memory
+                                  Smart category suggestion applied
                                 </p>
                               )}
 
