@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 
 const beforeAfterQuotes = [
@@ -34,13 +33,11 @@ export default function HomePage() {
 
         <header className="relative z-10 mx-auto flex max-w-7xl items-center justify-between px-6 py-6">
           <Link href="/" className="flex items-center gap-3">
-            <Image
-              src="/trueangle-icon.png"
-              alt="TrueAngle"
-              width={54}
-              height={54}
-              className="rounded-sm"
-            />
+<img
+  src="/trueangle-logo.png"
+  alt="TrueAngle"
+  className="h-14 w-auto"
+/>
             <div>
               <p className="text-3xl font-black uppercase tracking-tight">
                 TrueAngle
