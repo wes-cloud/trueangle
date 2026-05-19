@@ -175,6 +175,35 @@ function getSmartCategorySuggestion(vendorName: string) {
   return "";
 }
 
+function isLikelyTransfer(transaction: PlaidTransaction) {
+  const vendor = normalizeVendorName(
+    transaction.merchant_name || transaction.name || ""
+  );
+
+  const category = normalizeVendorName(transaction.category || "");
+
+  const transferKeywords = [
+    "transfer",
+    "account transfer",
+    "online transfer",
+    "ach transfer",
+    "external transfer",
+    "internal transfer",
+    "wire transfer",
+    "zelle",
+    "venmo",
+    "cash app",
+    "paypal transfer",
+    "payment to credit card",
+    "credit card payment",
+  ];
+
+  return transferKeywords.some(
+    (keyword) =>
+      vendor.includes(keyword) || category.includes(keyword)
+  );
+}
+
 function getTransactionVendor(transaction: PlaidTransaction) {
   return (
     transaction.merchant_name?.trim() ||
@@ -1033,15 +1062,19 @@ export default function BankingTransactionsPage() {
                               Posted: {formatDate(transaction.posted_date)}
                             </p>
 
-                            {isDeposit(transaction) ? (
-                              <p className="mt-1 text-sm font-semibold text-green-700">
-                                Incoming transaction
-                              </p>
-                            ) : (
-                              <p className="mt-1 text-sm font-semibold text-gray-700">
-                                Expense transaction
-                              </p>
-                            )}
+{isLikelyTransfer(transaction) ? (
+  <p className="mt-1 text-sm font-semibold text-amber-700">
+    Possible transfer / account movement
+  </p>
+) : isDeposit(transaction) ? (
+  <p className="mt-1 text-sm font-semibold text-green-700">
+    Incoming transaction
+  </p>
+) : (
+  <p className="mt-1 text-sm font-semibold text-gray-700">
+    Expense transaction
+  </p>
+)}
 
                             {draft.suggestedFromMemory &&
                               isExpense(transaction) && (
@@ -1227,13 +1260,22 @@ export default function BankingTransactionsPage() {
                       ) : (
                         <div className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-5">
                           <div>
-                            <p className="text-sm font-semibold text-gray-900">
-                              This looks like money coming into the account.
-                            </p>
-                            <p className="mt-1 text-sm text-gray-600">
-                              Match it to an invoice payment, or ignore it if it
-                              is a transfer, refund, or account movement.
-                            </p>
+<p className="mt-1 text-sm text-gray-600">
+  Match incoming payments to invoices or ignore transfers,
+  refunds, owner contributions, and account movements.
+</p>
+
+{isLikelyTransfer(transaction) && (
+  <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+    <p className="text-sm font-semibold text-amber-900">
+      TrueAngle thinks this may be a transfer between accounts.
+    </p>
+
+    <p className="mt-1 text-sm text-amber-800">
+      Transfers should usually not count as income or expenses.
+    </p>
+  </div>
+)}
                           </div>
 
                           <div>
@@ -1285,9 +1327,11 @@ export default function BankingTransactionsPage() {
                       >
                         {ignoringId === transaction.id
                           ? "Ignoring..."
-                          : isDeposit(transaction)
-                          ? "Ignore Incoming"
-                          : "Ignore / Not an Expense"}
+: isLikelyTransfer(transaction)
+? "Mark as Transfer"
+: isDeposit(transaction)
+? "Ignore Incoming"
+: "Ignore / Not an Expense"}
                       </button>
 
                       {isDeposit(transaction) && paymentToMatch && (
