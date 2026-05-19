@@ -82,6 +82,7 @@ type DraftValues = {
   estimateId: string;
   notes: string;
   suggestedFromMemory: boolean;
+  selectedPaymentId: string;
 };
 
 const DEFAULT_EXPENSE_CATEGORIES = [
@@ -136,87 +137,37 @@ function getSmartCategorySuggestion(vendorName: string) {
 
   const rules = [
     {
-      keywords: [
-        "home depot",
-        "lowes",
-        "lumber",
-        "builders firstsource",
-        "84 lumber",
-      ],
+      keywords: ["home depot", "lowes", "lumber", "builders firstsource", "84 lumber"],
       category: "Materials",
     },
-
     {
-      keywords: [
-        "sherwin",
-        "benjamin moore",
-        "paint",
-      ],
+      keywords: ["sherwin", "benjamin moore", "paint"],
       category: "Materials",
     },
-
     {
-      keywords: [
-        "shell",
-        "chevron",
-        "76",
-        "arco",
-        "costco gas",
-        "texaco",
-      ],
+      keywords: ["shell", "chevron", "76", "arco", "costco gas", "texaco"],
       category: "Fuel",
     },
-
     {
-      keywords: [
-        "amazon",
-        "harbor freight",
-        "northern tool",
-        "fastenal",
-      ],
+      keywords: ["amazon", "harbor freight", "northern tool", "fastenal"],
       category: "Tools / Small Equipment",
     },
-
     {
-      keywords: [
-        "mcdonald",
-        "starbucks",
-        "subway",
-        "chipotle",
-        "taco bell",
-        "restaurant",
-      ],
+      keywords: ["mcdonald", "starbucks", "subway", "chipotle", "taco bell", "restaurant"],
       category: "Meals",
     },
-
     {
-      keywords: [
-        "microsoft",
-        "google",
-        "openai",
-        "vercel",
-        "github",
-        "adobe",
-        "quickbooks",
-      ],
+      keywords: ["microsoft", "google", "openai", "vercel", "github", "adobe", "quickbooks"],
       category: "Software / Subscriptions",
     },
-
     {
-      keywords: [
-        "uhaul",
-        "storage",
-      ],
+      keywords: ["uhaul", "storage"],
       category: "Rent / Storage",
     },
   ];
 
   for (const rule of rules) {
-    const matched = rule.keywords.some((keyword) =>
-      vendor.includes(keyword)
-    );
-
-    if (matched) {
+    if (rule.keywords.some((keyword) => vendor.includes(keyword))) {
       return rule.category;
     }
   }
@@ -256,12 +207,7 @@ function dedupeCategories(values: string[]) {
  * amount < 0 = money entering the account
  *
  * Incoming transactions are not always income.
- * They may also be:
- * - transfers
- * - refunds
- * - credits
- * - owner contributions
- * - account movements
+ * They may also be transfers, refunds, credits, owner contributions, or account movements.
  */
 function isDeposit(transaction: PlaidTransaction) {
   return Number(transaction.amount || 0) < 0;
@@ -562,8 +508,8 @@ export default function BankingTransactionsPage() {
           );
 
           const smartSuggestion =
-  rememberedCategory ||
-  getSmartCategorySuggestion(getTransactionVendor(txn));
+            rememberedCategory ||
+            getSmartCategorySuggestion(getTransactionVendor(txn));
 
           nextDrafts[txn.id] = {
             category: smartSuggestion,
@@ -571,6 +517,7 @@ export default function BankingTransactionsPage() {
             estimateId: "",
             notes: "",
             suggestedFromMemory: !!smartSuggestion,
+            selectedPaymentId: "",
           };
         }
       });
@@ -795,7 +742,7 @@ export default function BankingTransactionsPage() {
     }
 
     setMatchingId(transaction.id);
-    setMessage("Matching bank deposit to invoice payment...");
+    setMessage("Matching incoming transaction to invoice payment...");
 
     try {
       const now = new Date().toISOString();
@@ -833,7 +780,7 @@ export default function BankingTransactionsPage() {
         return;
       }
 
-      setMessage("Bank deposit matched to invoice payment.");
+      setMessage("Incoming transaction matched to invoice payment.");
       await loadPageData(user.id);
     } finally {
       setMatchingId(null);
@@ -847,7 +794,7 @@ export default function BankingTransactionsPage() {
     }
 
     if (!isExpense(transaction)) {
-      setMessage("Deposits cannot be added as expenses.");
+      setMessage("Incoming transactions cannot be added as expenses.");
       return;
     }
 
@@ -998,8 +945,8 @@ export default function BankingTransactionsPage() {
                 Imported Transactions
               </h1>
               <p className="mt-1 text-sm text-gray-600">
-                Review expenses, ignore personal transactions, and match bank
-                deposits to invoice payments.
+                Review expenses, ignore personal transactions, and match incoming
+                transactions to invoice payments.
               </p>
             </div>
 
@@ -1036,40 +983,11 @@ export default function BankingTransactionsPage() {
         )}
 
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-5">
-          <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-200">
-            <p className="text-sm text-gray-500">Ready to Review</p>
-            <p className="mt-2 text-2xl font-bold text-gray-900">
-              {pendingImportTransactions.length}
-            </p>
-          </div>
-
-          <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-200">
-            <p className="text-sm text-gray-500">Matched Deposits</p>
-            <p className="mt-2 text-2xl font-bold text-gray-900">
-              {matchedTransactions.length}
-            </p>
-          </div>
-
-          <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-200">
-            <p className="text-sm text-gray-500">Imported Expenses</p>
-            <p className="mt-2 text-2xl font-bold text-gray-900">
-              {importedTransactions.length}
-            </p>
-          </div>
-
-          <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-200">
-            <p className="text-sm text-gray-500">Ignored</p>
-            <p className="mt-2 text-2xl font-bold text-gray-900">
-              {ignoredTransactions.length}
-            </p>
-          </div>
-
-          <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-200">
-            <p className="text-sm text-gray-500">Vendor Memories</p>
-            <p className="mt-2 text-2xl font-bold text-gray-900">
-              {vendorMemory.length}
-            </p>
-          </div>
+          <StatCard label="Ready to Review" value={pendingImportTransactions.length} />
+          <StatCard label="Matched Incoming" value={matchedTransactions.length} />
+          <StatCard label="Imported Expenses" value={importedTransactions.length} />
+          <StatCard label="Ignored" value={ignoredTransactions.length} />
+          <StatCard label="Vendor Memories" value={vendorMemory.length} />
         </div>
 
         <div className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
@@ -1088,9 +1006,16 @@ export default function BankingTransactionsPage() {
                   estimateId: "",
                   notes: "",
                   suggestedFromMemory: false,
+                  selectedPaymentId: "",
                 };
 
                 const possiblePaymentMatch = findMatchingPayment(transaction);
+                const selectedPayment =
+                  payments.find(
+                    (payment) => payment.id === draft.selectedPaymentId
+                  ) || null;
+
+                const paymentToMatch = selectedPayment || possiblePaymentMatch;
 
                 return (
                   <div
@@ -1125,11 +1050,11 @@ export default function BankingTransactionsPage() {
                                 </p>
                               )}
 
-                            {transaction.pending ? (
+                            {transaction.pending && (
                               <p className="text-sm font-medium text-amber-700">
                                 Pending transaction
                               </p>
-                            ) : null}
+                            )}
                           </div>
 
                           <div className="text-left md:text-right">
@@ -1151,7 +1076,7 @@ export default function BankingTransactionsPage() {
                         {possiblePaymentMatch && (
                           <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-4">
                             <p className="text-sm font-bold text-green-900">
-                              Possible invoice payment match
+                              Suggested invoice payment match
                             </p>
                             <p className="mt-1 text-sm text-green-900">
                               {getPaymentLabel(possiblePaymentMatch)}
@@ -1300,13 +1225,49 @@ export default function BankingTransactionsPage() {
                           </div>
                         </div>
                       ) : (
-                        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5">
-                          <p className="text-sm font-semibold text-gray-900">
-                            This looks like money coming into the account.
-                          </p>
-                          <p className="mt-1 text-sm text-gray-600">
-                            Match it to an invoice payment, or ignore it if it is a transfer, refund, or account movement.
-                          </p>
+                        <div className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-5">
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900">
+                              This looks like money coming into the account.
+                            </p>
+                            <p className="mt-1 text-sm text-gray-600">
+                              Match it to an invoice payment, or ignore it if it
+                              is a transfer, refund, or account movement.
+                            </p>
+                          </div>
+
+                          <div>
+                            <label className="mb-1 block text-sm font-medium text-gray-900">
+                              Match to Invoice Payment
+                            </label>
+
+                            <select
+                              value={draft.selectedPaymentId}
+                              onChange={(e) =>
+                                updateDraft(transaction.id, {
+                                  selectedPaymentId: e.target.value,
+                                })
+                              }
+                              className="w-full rounded-lg border p-3 text-gray-900"
+                            >
+                              <option value="">Select payment</option>
+
+                              {payments
+                                .filter(
+                                  (payment) =>
+                                    (payment.match_status || "unmatched") !==
+                                    "matched"
+                                )
+                                .map((payment) => (
+                                  <option key={payment.id} value={payment.id}>
+                                    {getPaymentLabel(payment)} —{" "}
+                                    {formatCurrency(
+                                      Math.abs(Number(payment.amount || 0))
+                                    )}
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1329,14 +1290,11 @@ export default function BankingTransactionsPage() {
                           : "Ignore / Not an Expense"}
                       </button>
 
-                      {possiblePaymentMatch && (
+                      {isDeposit(transaction) && paymentToMatch && (
                         <button
                           type="button"
                           onClick={() =>
-                            handleMatchToPayment(
-                              transaction,
-                              possiblePaymentMatch
-                            )
+                            handleMatchToPayment(transaction, paymentToMatch)
                           }
                           disabled={matchingId === transaction.id}
                           className={`rounded-xl px-4 py-2 text-white ${
@@ -1377,11 +1335,11 @@ export default function BankingTransactionsPage() {
 
         <div className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
           <h2 className="mb-6 text-2xl font-bold text-gray-900">
-            Matched Deposits
+            Matched Incoming Transactions
           </h2>
 
           {matchedTransactions.length === 0 ? (
-            <p className="text-gray-600">No matched deposits yet.</p>
+            <p className="text-gray-600">No matched incoming transactions yet.</p>
           ) : (
             <div className="space-y-4">
               {matchedTransactions.slice(0, 20).map((transaction) => (
@@ -1414,85 +1372,83 @@ export default function BankingTransactionsPage() {
           )}
         </div>
 
-        <div className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
-          <h2 className="mb-6 text-2xl font-bold text-gray-900">
-            Already Imported
-          </h2>
+        <TransactionListSection
+          title="Already Imported"
+          emptyText="No imported transactions yet."
+          transactions={importedTransactions}
+          label="Imported to expenses"
+        />
 
-          {importedTransactions.length === 0 ? (
-            <p className="text-gray-600">No imported transactions yet.</p>
-          ) : (
-            <div className="space-y-4">
-              {importedTransactions.slice(0, 20).map((transaction) => (
-                <div
-                  key={transaction.id}
-                  className="rounded-2xl border border-gray-200 p-4"
-                >
-                  <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                    <div>
-                      <p className="font-bold text-gray-900">
-                        {getTransactionVendor(transaction)}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        Posted: {formatDate(transaction.posted_date)}
-                      </p>
-                    </div>
-
-                    <div className="text-left md:text-right">
-                      <p className="font-semibold text-gray-900">
-                        {formatCurrency(getDisplayAmount(transaction))}
-                      </p>
-                      <p className="text-sm text-green-700">
-                        Imported to expenses
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
-          <h2 className="mb-6 text-2xl font-bold text-gray-900">
-            Ignored / Not Expenses
-          </h2>
-
-          {ignoredTransactions.length === 0 ? (
-            <p className="text-gray-600">No ignored transactions yet.</p>
-          ) : (
-            <div className="space-y-4">
-              {ignoredTransactions.slice(0, 20).map((transaction) => (
-                <div
-                  key={transaction.id}
-                  className="rounded-2xl border border-gray-200 p-4"
-                >
-                  <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                    <div>
-                      <p className="font-bold text-gray-900">
-                        {getTransactionVendor(transaction)}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        Posted: {formatDate(transaction.posted_date)}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        Reason: {transaction.ignored_reason || "Ignored"}
-                      </p>
-                    </div>
-
-                    <div className="text-left md:text-right">
-                      <p className="font-semibold text-gray-900">
-                        {formatCurrency(getDisplayAmount(transaction))}
-                      </p>
-                      <p className="text-sm text-gray-500">Ignored</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <TransactionListSection
+          title="Ignored / Not Expenses"
+          emptyText="No ignored transactions yet."
+          transactions={ignoredTransactions}
+          label="Ignored"
+        />
       </div>
     </main>
+  );
+}
+
+function StatCard({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-200">
+      <p className="text-sm text-gray-500">{label}</p>
+      <p className="mt-2 text-2xl font-bold text-gray-900">{value}</p>
+    </div>
+  );
+}
+
+function TransactionListSection({
+  title,
+  emptyText,
+  transactions,
+  label,
+}: {
+  title: string;
+  emptyText: string;
+  transactions: PlaidTransaction[];
+  label: string;
+}) {
+  return (
+    <div className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
+      <h2 className="mb-6 text-2xl font-bold text-gray-900">{title}</h2>
+
+      {transactions.length === 0 ? (
+        <p className="text-gray-600">{emptyText}</p>
+      ) : (
+        <div className="space-y-4">
+          {transactions.slice(0, 20).map((transaction) => (
+            <div
+              key={transaction.id}
+              className="rounded-2xl border border-gray-200 p-4"
+            >
+              <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <p className="font-bold text-gray-900">
+                    {getTransactionVendor(transaction)}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    Posted: {formatDate(transaction.posted_date)}
+                  </p>
+                  {transaction.ignored_reason && (
+                    <p className="text-sm text-gray-500">
+                      Reason: {transaction.ignored_reason}
+                    </p>
+                  )}
+                </div>
+
+                <div className="text-left md:text-right">
+                  <p className="font-semibold text-gray-900">
+                    {formatCurrency(getDisplayAmount(transaction))}
+                  </p>
+                  <p className="text-sm text-gray-500">{label}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
