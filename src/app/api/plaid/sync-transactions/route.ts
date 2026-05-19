@@ -33,6 +33,40 @@ export async function POST(req: NextRequest) {
     }
 
     for (const item of items) {
+      const now = new Date().toISOString();
+
+      const accountsResponse = await plaidClient.accountsGet({
+        access_token: item.access_token,
+      });
+
+      const accountRows = accountsResponse.data.accounts.map((account: any) => ({
+        user_id,
+        plaid_item_id: item.plaid_item_id,
+        plaid_account_id: account.account_id,
+        name: account.name || null,
+        official_name: account.official_name || null,
+        mask: account.mask || null,
+        type: account.type || null,
+        subtype: account.subtype || null,
+        available_balance: account.balances?.available ?? null,
+        current_balance: account.balances?.current ?? null,
+        iso_currency_code: account.balances?.iso_currency_code || null,
+        updated_at: now,
+      }));
+
+      if (accountRows.length > 0) {
+        const { error: accountsError } = await supabaseAdmin
+          .from("plaid_accounts")
+          .upsert(accountRows, { onConflict: "plaid_account_id" });
+
+        if (accountsError) {
+          return NextResponse.json(
+            { error: `Unable to save accounts: ${accountsError.message}` },
+            { status: 500 }
+          );
+        }
+      }
+
       let cursor: string | undefined = undefined;
       let hasMore = true;
 
@@ -59,7 +93,7 @@ export async function POST(req: NextRequest) {
             posted_date: txn.date || null,
             pending: txn.pending || false,
             raw_json: txn,
-            updated_at: new Date().toISOString(),
+            updated_at: now,
           }));
 
           const { error: txnError } = await supabaseAdmin
@@ -67,7 +101,6 @@ export async function POST(req: NextRequest) {
             .upsert(rows, { onConflict: "plaid_transaction_id" });
 
           if (txnError) {
-            console.error("plaid_transactions upsert error", txnError);
             return NextResponse.json(
               { error: `Unable to save transactions: ${txnError.message}` },
               { status: 500 }
@@ -78,11 +111,18 @@ export async function POST(req: NextRequest) {
         hasMore = syncResponse.data.has_more;
         cursor = syncResponse.data.next_cursor;
       }
+
+      await supabaseAdmin
+        .from("plaid_items")
+        .update({ last_synced_at: now, updated_at: now })
+        .eq("plaid_item_id", item.plaid_item_id)
+        .eq("user_id", user_id);
     }
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    console.error("sync-transactions error", error);
+    console.error("sync-transactions error", error?.response?.data || error);
+
     return NextResponse.json(
       {
         error:
