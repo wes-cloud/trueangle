@@ -25,16 +25,15 @@ const navGroups = [
     ],
   },
   {
-{
-  label: "Money",
-  icon: "💰",
-  items: [
-    { href: "/banking", label: "Banking Overview" },
-    { href: "/banking/transactions", label: "Review Transactions" },
-    { href: "/expenses", label: "Expenses" },
-    { href: "/mileage", label: "Mileage" },
-  ],
-},
+    label: "Money",
+    icon: "💰",
+    items: [
+      { href: "/banking", label: "Banking Overview" },
+      { href: "/banking/transactions", label: "Review Transactions" },
+      { href: "/expenses", label: "Expenses" },
+      { href: "/mileage", label: "Mileage" },
+    ],
+  },
   {
     label: "Customers",
     icon: "👥",
