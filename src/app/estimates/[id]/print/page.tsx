@@ -377,9 +377,7 @@ export default function EstimatePrintPage() {
 <th className="px-4 py-3 text-right text-sm" style={{ color: "#000000" }}>
             Qty / Rate
           </th>
-          <th className="px-4 py-3 text-right text-sm" style={{ color: "#000000" }}>
-            Tax
-          </th>
+
           <th className="px-4 py-3 text-right text-sm" style={{ color: "#000000" }}>
             Total
           </th>
