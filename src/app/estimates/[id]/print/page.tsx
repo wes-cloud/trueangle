@@ -374,7 +374,7 @@ export default function EstimatePrintPage() {
           <th className="px-4 py-3 text-left text-sm" style={{ color: "#000000" }}>
             Description
           </th>
-          <th className="px-4 py-3 text-right text-sm" style={{ color: "#000000" }}>
+<th className="px-4 py-3 text-right text-sm" style={{ color: "#000000" }}>
             Qty / Rate
           </th>
           <th className="px-4 py-3 text-right text-sm" style={{ color: "#000000" }}>
@@ -415,33 +415,17 @@ export default function EstimatePrintPage() {
                   )}
                 </td>
 
-                <td className="px-4 py-3 text-right text-sm" style={{ color: "#111827" }}>
-                  {showQtyRate ? (
-                    <>
-                      <p>Qty: {item.quantity}</p>
-                      <p>{formatCurrency(Number(item.rate || 0))}</p>
-                    </>
-                  ) : (
-                    <p>Included</p>
-                  )}
-                </td>
+<td className="px-4 py-3 text-right text-sm" style={{ color: "#111827" }}>
+  {showQtyRate ? item.quantity : ""}
+</td>
 
-                <td className="px-4 py-3 text-right text-sm" style={{ color: "#111827" }}>
-                  {item.tax_enabled ? (
-                    <>
-                      <p>{item.tax_label || "Tax"}</p>
-                      <p>
-                        {Number(item.tax_rate || 0)}% — {formatCurrency(taxAmount)}
-                      </p>
-                    </>
-                  ) : (
-                    <p>—</p>
-                  )}
-                </td>
+<td className="px-4 py-3 text-right text-sm" style={{ color: "#111827" }}>
+  {showQtyRate ? formatCurrency(Number(item.rate || 0)) : ""}
+</td>
 
-                <td className="px-4 py-3 text-right text-sm" style={{ color: "#111827" }}>
-                  {formatCurrency(lineTotal)}
-                </td>
+<td className="px-4 py-3 text-right text-sm" style={{ color: "#111827" }}>
+  {formatCurrency(lineTotal)}
+</td>
               </tr>
             );
           })
@@ -461,19 +445,46 @@ export default function EstimatePrintPage() {
       <span>{formatCurrency(markupAmount)}</span>
     </div>
 
-    {lineItems.some((item) => item.tax_enabled) && (
-      <div className="flex items-center justify-between" style={{ color: "#111827" }}>
-        <span>Total Tax</span>
-        <span>
-          {formatCurrency(
-            lineItems.reduce(
-              (sum, item) => sum + Number(item.tax_amount || 0),
-              0
-            )
-          )}
-        </span>
+{lineItems.some((item) => item.tax_enabled) && (
+  <div className="space-y-1">
+    {Object.entries(
+      lineItems.reduce<Record<string, number>>((acc, item) => {
+        if (!item.tax_enabled) return acc;
+
+        const label = `${item.tax_label || "Tax"} ${Number(
+          item.tax_rate || 0
+        )}%`;
+
+        acc[label] = (acc[label] || 0) + Number(item.tax_amount || 0);
+        return acc;
+      }, {})
+    ).map(([label, amount]) => (
+      <div
+        key={label}
+        className="flex items-center justify-between"
+        style={{ color: "#111827" }}
+      >
+        <span>{label}</span>
+        <span>{formatCurrency(amount)}</span>
       </div>
-    )}
+    ))}
+
+    <div
+      className="flex items-center justify-between"
+      style={{ color: "#111827" }}
+    >
+      <span>Total Tax</span>
+      <span>
+        {formatCurrency(
+          lineItems.reduce(
+            (sum, item) => sum + Number(item.tax_amount || 0),
+            0
+          )
+        )}
+      </span>
+    </div>
+  </div>
+)}
 
     <div
       className="flex items-center justify-between pt-3 text-lg font-bold"
