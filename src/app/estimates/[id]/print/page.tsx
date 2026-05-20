@@ -38,8 +38,14 @@ type LineItem = {
   id: string;
   estimate_id: string;
   type: string;
+  description?: string | null;
   quantity: number;
   rate: number;
+  show_quantity_rate?: boolean | null;
+  tax_enabled?: boolean | null;
+  tax_label?: string | null;
+  tax_rate?: number | null;
+  tax_amount?: number | null;
 };
 
 type EstimatePhoto = {
@@ -135,7 +141,7 @@ export default function EstimatePrintPage() {
 
       const { data: lineItemsData, error: lineItemsError } = await supabase
         .from("line_items")
-        .select("id, estimate_id, type, quantity, rate")
+        .select("id, estimate_id, type, description, quantity, rate, show_quantity_rate, tax_enabled, tax_label, tax_rate, tax_amount")
         .eq("estimate_id", estimateId);
 
       if (lineItemsError) {
@@ -357,69 +363,127 @@ export default function EstimatePrintPage() {
           </div>
 
           <div className="mb-8">
-            <h2 className="mb-3 text-xl font-bold" style={{ color: "#000000" }}>
-              Line Items
-            </h2>
+  <h2 className="mb-3 text-xl font-bold" style={{ color: "#000000" }}>
+    Line Items
+  </h2>
 
-            <div className="overflow-hidden rounded-xl" style={{ border: "1px solid #d1d5db" }}>
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr style={{ backgroundColor: "#f3f4f6" }}>
-                    <th className="px-4 py-3 text-left text-sm" style={{ color: "#000000" }}>Description</th>
-                    <th className="px-4 py-3 text-right text-sm" style={{ color: "#000000" }}>Qty</th>
-                    <th className="px-4 py-3 text-right text-sm" style={{ color: "#000000" }}>Rate</th>
-                    <th className="px-4 py-3 text-right text-sm" style={{ color: "#000000" }}>Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lineItems.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="px-4 py-4 text-sm" style={{ color: "#1f2937" }}>
-                        No line items.
-                      </td>
-                    </tr>
-                  ) : (
-                    lineItems.map((item) => {
-                      const lineTotal = Number(item.quantity || 0) * Number(item.rate || 0);
+  <div className="overflow-hidden rounded-xl" style={{ border: "1px solid #d1d5db" }}>
+    <table className="w-full border-collapse">
+      <thead>
+        <tr style={{ backgroundColor: "#f3f4f6" }}>
+          <th className="px-4 py-3 text-left text-sm" style={{ color: "#000000" }}>
+            Description
+          </th>
+          <th className="px-4 py-3 text-right text-sm" style={{ color: "#000000" }}>
+            Qty / Rate
+          </th>
+          <th className="px-4 py-3 text-right text-sm" style={{ color: "#000000" }}>
+            Tax
+          </th>
+          <th className="px-4 py-3 text-right text-sm" style={{ color: "#000000" }}>
+            Total
+          </th>
+        </tr>
+      </thead>
 
-                      return (
-                        <tr key={item.id} style={{ borderTop: "1px solid #d1d5db" }}>
-                          <td className="px-4 py-3 text-sm" style={{ color: "#111827" }}>{item.type}</td>
-                          <td className="px-4 py-3 text-right text-sm" style={{ color: "#111827" }}>{item.quantity}</td>
-                          <td className="px-4 py-3 text-right text-sm" style={{ color: "#111827" }}>
-                            {formatCurrency(Number(item.rate || 0))}
-                          </td>
-                          <td className="px-4 py-3 text-right text-sm" style={{ color: "#111827" }}>
-                            {formatCurrency(lineTotal)}
-                          </td>
-                        </tr>
-                      );
-                    })
+      <tbody>
+        {lineItems.length === 0 ? (
+          <tr>
+            <td colSpan={4} className="px-4 py-4 text-sm" style={{ color: "#1f2937" }}>
+              No line items.
+            </td>
+          </tr>
+        ) : (
+          lineItems.map((item) => {
+            const lineTotal =
+              Number(item.quantity || 0) * Number(item.rate || 0);
+
+            const showQtyRate = item.show_quantity_rate ?? true;
+            const taxAmount = Number(item.tax_amount || 0);
+
+            return (
+              <tr key={item.id} style={{ borderTop: "1px solid #d1d5db" }}>
+                <td className="px-4 py-3 text-sm" style={{ color: "#111827" }}>
+                  <p style={{ fontWeight: 600, color: "#000000" }}>
+                    {item.type}
+                  </p>
+
+                  {item.description && (
+                    <p className="mt-1 whitespace-pre-line text-xs" style={{ color: "#4b5563" }}>
+                      {item.description}
+                    </p>
                   )}
-                </tbody>
-              </table>
-            </div>
+                </td>
 
-            <div className="ml-auto mt-6 w-full max-w-sm space-y-2">
-              <div className="flex items-center justify-between" style={{ color: "#111827" }}>
-                <span>Subtotal</span>
-                <span>{formatCurrency(subtotal)}</span>
-              </div>
+                <td className="px-4 py-3 text-right text-sm" style={{ color: "#111827" }}>
+                  {showQtyRate ? (
+                    <>
+                      <p>Qty: {item.quantity}</p>
+                      <p>{formatCurrency(Number(item.rate || 0))}</p>
+                    </>
+                  ) : (
+                    <p>Included</p>
+                  )}
+                </td>
 
-              <div className="flex items-center justify-between" style={{ color: "#111827" }}>
-                <span>Markup ({markupPercent}%)</span>
-                <span>{formatCurrency(markupAmount)}</span>
-              </div>
+                <td className="px-4 py-3 text-right text-sm" style={{ color: "#111827" }}>
+                  {item.tax_enabled ? (
+                    <>
+                      <p>{item.tax_label || "Tax"}</p>
+                      <p>
+                        {Number(item.tax_rate || 0)}% — {formatCurrency(taxAmount)}
+                      </p>
+                    </>
+                  ) : (
+                    <p>—</p>
+                  )}
+                </td>
 
-              <div
-                className="flex items-center justify-between pt-3 text-lg font-bold"
-                style={{ color: "#000000", borderTop: "1px solid #000000" }}
-              >
-                <span>Total</span>
-                <span>{formatCurrency(finalTotal)}</span>
-              </div>
-            </div>
-          </div>
+                <td className="px-4 py-3 text-right text-sm" style={{ color: "#111827" }}>
+                  {formatCurrency(lineTotal)}
+                </td>
+              </tr>
+            );
+          })
+        )}
+      </tbody>
+    </table>
+  </div>
+
+  <div className="ml-auto mt-6 w-full max-w-sm space-y-2">
+    <div className="flex items-center justify-between" style={{ color: "#111827" }}>
+      <span>Subtotal</span>
+      <span>{formatCurrency(subtotal)}</span>
+    </div>
+
+    <div className="flex items-center justify-between" style={{ color: "#111827" }}>
+      <span>Markup ({markupPercent}%)</span>
+      <span>{formatCurrency(markupAmount)}</span>
+    </div>
+
+    {lineItems.some((item) => item.tax_enabled) && (
+      <div className="flex items-center justify-between" style={{ color: "#111827" }}>
+        <span>Total Tax</span>
+        <span>
+          {formatCurrency(
+            lineItems.reduce(
+              (sum, item) => sum + Number(item.tax_amount || 0),
+              0
+            )
+          )}
+        </span>
+      </div>
+    )}
+
+    <div
+      className="flex items-center justify-between pt-3 text-lg font-bold"
+      style={{ color: "#000000", borderTop: "1px solid #000000" }}
+    >
+      <span>Total</span>
+      <span>{formatCurrency(finalTotal)}</span>
+    </div>
+  </div>
+</div>
 
           {photos.length > 0 && (
             <div className="mb-8">
