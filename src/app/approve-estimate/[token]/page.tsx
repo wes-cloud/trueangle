@@ -12,6 +12,7 @@ type Estimate = {
   amount: number | null;
   agreement_terms: string | null;
   status: string | null;
+  markup_percent?: number | null;
 };
 
 type LineItem = {
@@ -58,7 +59,8 @@ export default function ApproveEstimatePage() {
           project_description,
           amount,
           agreement_terms,
-          status
+          status,
+          markup_percent
         `
         )
         .eq("approval_token", token)
@@ -141,7 +143,9 @@ const totalTax = lineItems.reduce(
   0
 );
 
-const finalTotal = subtotal + totalTax;
+const markupPercent = Number(estimate?.markup_percent || 0);
+const markupAmount = subtotal * (markupPercent / 100);
+const finalTotal = Number(estimate?.amount || subtotal + markupAmount + totalTax);
 
   if (loading) {
     return (
@@ -332,6 +336,11 @@ const finalTotal = subtotal + totalTax;
       <span>Subtotal</span>
       <span>{formatCurrency(subtotal)}</span>
     </div>
+
+    <div className="flex items-center justify-between text-sm text-slate-700">
+  <span>Markup ({markupPercent}%)</span>
+  <span>{formatCurrency(markupAmount)}</span>
+</div>
 
     {Object.entries(
       lineItems.reduce<Record<string, number>>((acc, item) => {
