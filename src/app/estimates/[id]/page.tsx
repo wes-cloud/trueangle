@@ -131,6 +131,7 @@ export default function EstimateDetailPage() {
   const [statusLoading, setStatusLoading] = useState(false);
   const [savingApproval, setSavingApproval] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [estimate, setEstimate] = useState<Estimate | null>(null);
@@ -389,6 +390,60 @@ export default function EstimateDetailPage() {
     await loadData();
     setStatusLoading(false);
   }
+
+  async function handleSendEstimateEmail() {
+  if (!estimate || !approvalLink) return;
+
+  if (!estimate.customer_email) {
+    setMessage("Customer email is missing.");
+    return;
+  }
+
+  setSendingEmail(true);
+  setMessage("");
+
+  try {
+    const response = await fetch("/api/send-estimate-email", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        customerEmail: estimate.customer_email,
+        customerName: estimate.customer_name,
+        estimateNumber: estimate.estimate_number,
+        projectName: estimate.job_name,
+        approvalUrl: approvalLink,
+        total: Number(estimate.amount || 0),
+        companyName: "TrueAngle",
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      setMessage(data.error || "Unable to send estimate email.");
+      setSendingEmail(false);
+      return;
+    }
+
+    await supabase
+      .from("estimates")
+      .update({
+        status: "sent",
+        approval_required: true,
+      })
+      .eq("id", estimate.id);
+
+    setMessage("Estimate email sent successfully.");
+    await loadData();
+  } catch (error) {
+    console.error(error);
+    setMessage("Unable to send estimate email.");
+  }
+
+  setSendingEmail(false);
+}
 
   async function copyApprovalLink() {
     if (!approvalLink) return;
@@ -854,6 +909,20 @@ export default function EstimateDetailPage() {
               >
                 Send for Approval
               </button>
+
+              <button
+  type="button"
+  onClick={handleSendEstimateEmail}
+  disabled={
+    sendingEmail ||
+    statusLoading ||
+    isConverted ||
+    !estimate.customer_email
+  }
+  className="rounded-xl bg-orange-600 px-4 py-2 text-white disabled:opacity-50"
+>
+  {sendingEmail ? "Sending..." : "Email Estimate"}
+</button>
 
               {approvalLink && !isConverted && (
                 <button
