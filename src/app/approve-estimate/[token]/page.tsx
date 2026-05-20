@@ -14,6 +14,20 @@ type Estimate = {
   status: string | null;
 };
 
+type LineItem = {
+  id: string;
+  estimate_id: string;
+  type: string;
+  description?: string | null;
+  quantity: number;
+  rate: number;
+  show_quantity_rate?: boolean | null;
+  tax_enabled?: boolean | null;
+  tax_label?: string | null;
+  tax_rate?: number | null;
+  tax_amount?: number | null;
+};
+
 export default function ApproveEstimatePage() {
   const params = useParams();
   const token = Array.isArray(params?.token)
@@ -22,6 +36,7 @@ export default function ApproveEstimatePage() {
 
   const [loading, setLoading] = useState(true);
   const [estimate, setEstimate] = useState<Estimate | null>(null);
+  const [lineItems, setLineItems] = useState<LineItem[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const [clientName, setClientName] = useState("");
@@ -56,6 +71,26 @@ export default function ApproveEstimatePage() {
       }
 
       setEstimate(data);
+      const { data: lineItemsData } = await supabase
+  .from("line_items")
+  .select(
+    `
+    id,
+    estimate_id,
+    type,
+    description,
+    quantity,
+    rate,
+    show_quantity_rate,
+    tax_enabled,
+    tax_label,
+    tax_rate,
+    tax_amount
+    `
+  )
+  .eq("estimate_id", data.id);
+
+setLineItems((lineItemsData || []) as LineItem[]);
       setLoading(false);
     }
 
@@ -95,6 +130,18 @@ export default function ApproveEstimatePage() {
       currency: "USD",
     }).format(value || 0);
   }
+  const subtotal = lineItems.reduce(
+  (sum, item) =>
+    sum + Number(item.quantity || 0) * Number(item.rate || 0),
+  0
+);
+
+const totalTax = lineItems.reduce(
+  (sum, item) => sum + Number(item.tax_amount || 0),
+  0
+);
+
+const finalTotal = subtotal + totalTax;
 
   if (loading) {
     return (
@@ -206,6 +253,122 @@ export default function ApproveEstimatePage() {
               {estimate?.project_description || "—"}
             </p>
           </section>
+
+<section className="rounded-2xl border border-slate-200 p-6">
+  <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+    Estimate Breakdown
+  </p>
+
+  <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200">
+    <table className="w-full border-collapse">
+      <thead className="bg-slate-100">
+        <tr>
+          <th className="px-4 py-3 text-left text-sm font-bold text-slate-700">
+            Description
+          </th>
+
+          <th className="px-4 py-3 text-right text-sm font-bold text-slate-700">
+            Qty
+          </th>
+
+          <th className="px-4 py-3 text-right text-sm font-bold text-slate-700">
+            Rate
+          </th>
+
+          <th className="px-4 py-3 text-right text-sm font-bold text-slate-700">
+            Total
+          </th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {lineItems.map((item) => {
+          const lineTotal =
+            Number(item.quantity || 0) *
+            Number(item.rate || 0);
+
+          const showQtyRate =
+            item.show_quantity_rate ?? true;
+
+          return (
+            <tr
+              key={item.id}
+              className="border-t border-slate-200"
+            >
+              <td className="px-4 py-4 text-sm text-slate-900">
+                <p className="font-bold">
+                  {item.type}
+                </p>
+
+                {item.description && (
+                  <p className="mt-1 whitespace-pre-line text-xs text-slate-500">
+                    {item.description}
+                  </p>
+                )}
+              </td>
+
+              <td className="px-4 py-4 text-right text-sm text-slate-900">
+                {showQtyRate ? item.quantity : ""}
+              </td>
+
+              <td className="px-4 py-4 text-right text-sm text-slate-900">
+                {showQtyRate
+                  ? formatCurrency(Number(item.rate || 0))
+                  : ""}
+              </td>
+
+              <td className="px-4 py-4 text-right text-sm font-semibold text-slate-900">
+                {formatCurrency(lineTotal)}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  </div>
+
+  <div className="ml-auto mt-6 max-w-sm space-y-2">
+    <div className="flex items-center justify-between text-sm text-slate-700">
+      <span>Subtotal</span>
+      <span>{formatCurrency(subtotal)}</span>
+    </div>
+
+    {Object.entries(
+      lineItems.reduce<Record<string, number>>((acc, item) => {
+        if (!item.tax_enabled) return acc;
+
+        const label = `${item.tax_label || "Tax"} ${
+          Number(item.tax_rate || 0)
+        }%`;
+
+        acc[label] =
+          (acc[label] || 0) +
+          Number(item.tax_amount || 0);
+
+        return acc;
+      }, {})
+    ).map(([label, amount]) => (
+      <div
+        key={label}
+        className="flex items-center justify-between text-sm text-slate-700"
+      >
+        <span>{label}</span>
+
+        <span>
+          {formatCurrency(amount)}
+        </span>
+      </div>
+    ))}
+
+    <div className="flex items-center justify-between border-t border-slate-300 pt-3 text-lg font-black text-slate-950">
+      <span>Total</span>
+
+      <span>
+        {formatCurrency(finalTotal)}
+      </span>
+    </div>
+  </div>
+</section>
 
           <section className="rounded-2xl border border-slate-200 p-6">
             <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
