@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import SignatureCanvas from "react-signature-canvas";
 
 type Estimate = {
   id: string;
@@ -44,6 +45,8 @@ export default function ApproveEstimatePage() {
   const [clientEmail, setClientEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [approved, setApproved] = useState(false);
+  const signatureRef = useRef<SignatureCanvas | null>(null);
+  const [signatureError, setSignatureError] = useState("");
 
   useEffect(() => {
     async function loadEstimate() {
@@ -102,13 +105,25 @@ setLineItems((lineItemsData || []) as LineItem[]);
   async function handleApprove() {
     if (!estimate || !token) return;
 
-    if (!clientName.trim()) {
-      setError("Please enter your name.");
-      return;
-    }
+if (!clientName.trim()) {
+  setError("Please enter your name.");
+  return;
+}
+
+if (!signatureRef.current || signatureRef.current.isEmpty()) {
+  setSignatureError("Please provide a signature.");
+  return;
+}
+
+setSignatureError("");
 
     setSubmitting(true);
     setError(null);
+
+    const signatureData =
+  signatureRef.current
+    ?.getTrimmedCanvas()
+    .toDataURL("image/png") || null;
 
     const { error } = await supabase.rpc("approve_estimate_and_create_invoice", {
       approval_token_input: token,
@@ -121,6 +136,18 @@ setLineItems((lineItemsData || []) as LineItem[]);
       setSubmitting(false);
       return;
     }
+
+    const { error: signatureSaveError } = await supabase
+  .from("estimates")
+  .update({
+    signature_data: signatureData,
+    signed_at: new Date().toISOString(),
+  })
+  .eq("id", estimate.id);
+
+if (signatureSaveError) {
+  console.error(signatureSaveError);
+}
 
     setApproved(true);
     setSubmitting(false);
@@ -411,12 +438,52 @@ const finalTotal = Number(estimate?.amount || subtotal + markupAmount + totalTax
 
               <input
                 type="email"
+                
                 placeholder="Your Email (optional)"
                 value={clientEmail}
                 onChange={(e) => setClientEmail(e.target.value)}
                 className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-4 text-slate-950 outline-none transition focus:border-slate-950"
               />
             </div>
+
+            <div className="space-y-2">
+  <div className="flex items-center justify-between">
+    <label className="text-sm font-semibold text-slate-700">
+      Signature
+    </label>
+
+    <button
+      type="button"
+      onClick={() => {
+        signatureRef.current?.clear();
+        setSignatureError("");
+      }}
+      className="text-xs font-semibold text-red-600 hover:underline"
+    >
+      Clear
+    </button>
+  </div>
+
+  <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white">
+    <SignatureCanvas
+      ref={signatureRef}
+      penColor="black"
+      canvasProps={{
+        className: "h-52 w-full",
+      }}
+    />
+  </div>
+
+  <p className="text-xs text-slate-500">
+    Sign with your mouse or finger.
+  </p>
+
+  {signatureError && (
+    <p className="text-sm font-semibold text-red-600">
+      {signatureError}
+    </p>
+  )}
+</div>
 
             {error && (
               <p className="mt-4 text-sm font-semibold text-red-600">
