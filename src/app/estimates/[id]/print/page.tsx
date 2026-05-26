@@ -31,12 +31,10 @@ type Estimate = {
   estimate_number?: string | null;
   amount: number | null;
   markup_percent?: number | null;
-
   approved_by_name?: string | null;
   approved_by_email?: string | null;
   signature_data?: string | null;
   signed_at?: string | null;
-
   created_at: string | null;
 };
 
@@ -60,6 +58,10 @@ type EstimatePhoto = {
   caption: string | null;
 };
 
+const BRAND_NAVY = "#0f172a";
+const BRAND_ORANGE = "#f97316";
+const BRAND_SLATE = "#475569";
+
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -74,11 +76,12 @@ function formatDate(value?: string | null) {
   return date.toLocaleDateString("en-US");
 }
 
-
-// Brand colors used in the print page
-const BRAND_NAVY = "#0f172a";
-const BRAND_ORANGE = "#f97316";
-const BRAND_SLATE = "#475569";
+function formatDateTime(value?: string | null) {
+  if (!value) return "Date";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("en-US");
+}
 
 function getLineItemsTotal(items: { quantity: number; rate: number }[]) {
   return items.reduce(
@@ -157,7 +160,9 @@ export default function EstimatePrintPage() {
 
       const { data: lineItemsData, error: lineItemsError } = await supabase
         .from("line_items")
-        .select("id, estimate_id, type, description, quantity, rate, show_quantity_rate, tax_enabled, tax_label, tax_rate, tax_amount")
+        .select(
+          "id, estimate_id, type, description, quantity, rate, show_quantity_rate, tax_enabled, tax_label, tax_rate, tax_amount"
+        )
         .eq("estimate_id", estimateId);
 
       if (lineItemsError) {
@@ -206,7 +211,6 @@ export default function EstimatePrintPage() {
   }, [estimateId]);
 
   const subtotal = useMemo(() => getLineItemsTotal(lineItems), [lineItems]);
-
   const markupPercent = Number(estimate?.markup_percent || 0);
   const markupAmount = subtotal * (markupPercent / 100);
   const calculatedTotal = subtotal + markupAmount;
@@ -214,7 +218,10 @@ export default function EstimatePrintPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen p-8" style={{ backgroundColor: "#ffffff", color: "#000000" }}>
+      <main
+        className="min-h-screen p-8"
+        style={{ backgroundColor: "#ffffff", color: "#000000" }}
+      >
         <p>Loading printable estimate...</p>
       </main>
     );
@@ -222,7 +229,10 @@ export default function EstimatePrintPage() {
 
   if (error || !estimate) {
     return (
-      <main className="min-h-screen p-8" style={{ backgroundColor: "#ffffff", color: "#000000" }}>
+      <main
+        className="min-h-screen p-8"
+        style={{ backgroundColor: "#ffffff", color: "#000000" }}
+      >
         <p style={{ color: "#dc2626" }}>
           Error: {error || "Estimate not found."}
         </p>
@@ -264,19 +274,20 @@ export default function EstimatePrintPage() {
             print-color-adjust: exact;
           }
 
-          img {
-            break-inside: avoid;
-            page-break-inside: avoid;
-          }
-
-          .photo-card {
+          img,
+          .photo-card,
+          .signature-card,
+          .total-card {
             break-inside: avoid;
             page-break-inside: avoid;
           }
         }
       `}</style>
 
-      <main className="min-h-screen p-8" style={{ backgroundColor: "#ffffff", color: "#000000" }}>
+      <main
+        className="min-h-screen p-8"
+        style={{ backgroundColor: "#ffffff", color: "#000000" }}
+      >
         <div className="no-print mx-auto mb-6 flex max-w-5xl gap-3">
           <button
             type="button"
@@ -296,363 +307,505 @@ export default function EstimatePrintPage() {
         </div>
 
         <div
-          className="mx-auto max-w-5xl rounded-2xl p-10 shadow print:shadow-none"
+          className="mx-auto max-w-5xl overflow-hidden rounded-2xl shadow print:shadow-none"
           style={{
             backgroundColor: "#ffffff",
             color: "#000000",
             border: "1px solid #e5e7eb",
-            borderTop: `6px solid ${BRAND_ORANGE}`,
           }}
         >
-          <div className="mb-10 flex items-start justify-between gap-8">
-            <div className="max-w-[60%]">
-              {companySettings?.logo_url ? (
-                <img
-                  src={companySettings.logo_url}
-                  alt="Company logo"
-                  className="mb-4 max-h-20"
-                />
-              ) : null}
-
-              <h1 className="text-3xl font-bold" style={{ color: "#000000" }}>
-                {companyName}
-              </h1>
-
-              {companyAddress && (
-                <p className="mt-2 text-sm" style={{ color: "#111827" }}>
-                  {companyAddress}
-                </p>
-              )}
-
-              <div className="mt-2 space-y-1 text-sm" style={{ color: "#111827" }}>
-                {companyPhone && <p>{companyPhone}</p>}
-                {companyEmail && <p>{companyEmail}</p>}
-                {companyTaxId && <p>Tax ID / EIN: {companyTaxId}</p>}
-                {companyLicense && <p>License #: {companyLicense}</p>}
-              </div>
-            </div>
-
-            <div className="min-w-[240px] rounded-xl p-4" style={{ border: "1px solid #d1d5db" }}>
-              <p className="mb-2 text-xs font-bold uppercase tracking-wide" style={{ color: "#1f2937" }}>
-                Estimate
-              </p>
-              <p style={{ color: "#111827" }}>
-                <span style={{ fontWeight: 600, color: "#000000" }}>Estimate #:</span>{" "}
-                {estimate.estimate_number || "—"}
-              </p>
-              <p style={{ color: "#111827" }}>
-                <span style={{ fontWeight: 600, color: "#000000" }}>Date:</span>{" "}
-                {formatDate(estimate.created_at)}
-              </p>
-              <p style={{ color: "#111827" }}>
-                <span style={{ fontWeight: 600, color: "#000000" }}>Valid Until:</span>{" "}
-                {formatDate(estimate.valid_until)}
-              </p>
-            </div>
-          </div>
-
-          <div className="mb-8 grid gap-6 md:grid-cols-2">
-            <div className="rounded-xl p-4" style={{ border: "1px solid #d1d5db" }}>
-              <p className="mb-2 text-xs font-bold uppercase tracking-wide" style={{ color: "#1f2937" }}>
-                Customer
-              </p>
-              <p style={{ fontWeight: 600, color: "#000000" }}>
-                {estimate.customer_name || "—"}
-              </p>
-              {estimate.customer_address && <p className="text-sm" style={{ color: "#111827" }}>{estimate.customer_address}</p>}
-              {estimate.customer_phone && <p className="text-sm" style={{ color: "#111827" }}>{estimate.customer_phone}</p>}
-              {estimate.customer_email && <p className="text-sm" style={{ color: "#111827" }}>{estimate.customer_email}</p>}
-            </div>
-
-            <div className="rounded-xl p-4" style={{ border: "1px solid #d1d5db" }}>
-              <p className="mb-2 text-xs font-bold uppercase tracking-wide" style={{ color: "#1f2937" }}>
-                Project
-              </p>
-              <p style={{ fontWeight: 600, color: "#000000" }}>
-                {estimate.job_name || "—"}
-              </p>
-              {estimate.project_description && (
-                <p className="text-sm" style={{ color: "#111827" }}>
-                  {estimate.project_description}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="mb-8">
-  <h2 className="mb-3 text-xl font-bold" style={{ color: "#000000" }}>
-    Line Items
-  </h2>
-
-  <div className="overflow-hidden rounded-xl" style={{ border: "1px solid #d1d5db" }}>
-    <table className="w-full border-collapse">
-      <thead>
-        <tr style={{ backgroundColor: "#f3f4f6" }}>
-          <th className="px-4 py-3 text-left text-sm" style={{ color: "#000000" }}>
-            Description
-          </th>
-<th className="px-4 py-3 text-right text-sm" style={{ color: "#000000" }}>
-            Quantity
-          </th>
-          <th className="px-4 py-3 text-right text-sm" style={{ color: "#000000" }}>
-            Rate
-          </th>
-          <th className="px-4 py-3 text-right text-sm" style={{ color: "#000000" }}>
-            Total
-          </th>
-        </tr>
-      </thead>
-
-      <tbody>
-        {lineItems.length === 0 ? (
-          <tr>
-            <td colSpan={4} className="px-4 py-4 text-sm" style={{ color: "#1f2937" }}>
-              No line items.
-            </td>
-          </tr>
-        ) : (
-          lineItems.map((item) => {
-            const lineTotal =
-              Number(item.quantity || 0) * Number(item.rate || 0);
-
-            const showQtyRate = item.show_quantity_rate ?? true;
-            const taxAmount = Number(item.tax_amount || 0);
-
-            return (
-              <tr key={item.id} style={{ borderTop: "1px solid #d1d5db" }}>
-                <td className="px-4 py-3 text-sm" style={{ color: "#111827" }}>
-                  <p style={{ fontWeight: 600, color: "#000000" }}>
-                    {item.type}
-                  </p>
-
-                  {item.description && (
-                    <p className="mt-1 whitespace-pre-line text-xs" style={{ color: "#4b5563" }}>
-                      {item.description}
-                    </p>
-                  )}
-                </td>
-
-<td className="px-4 py-3 text-right text-sm" style={{ color: "#111827" }}>
-  {showQtyRate ? item.quantity : ""}
-</td>
-
-<td className="px-4 py-3 text-right text-sm" style={{ color: "#111827" }}>
-  {showQtyRate ? formatCurrency(Number(item.rate || 0)) : ""}
-</td>
-
-<td className="px-4 py-3 text-right text-sm" style={{ color: "#111827" }}>
-  {formatCurrency(lineTotal)}
-</td>
-              </tr>
-            );
-          })
-        )}
-      </tbody>
-    </table>
-  </div>
-
-  <div className="ml-auto mt-6 w-full max-w-sm space-y-2">
-    <div className="flex items-center justify-between" style={{ color: "#111827" }}>
-      <span>Subtotal</span>
-      <span>{formatCurrency(subtotal)}</span>
-    </div>
-
-    <div className="flex items-center justify-between" style={{ color: "#111827" }}>
-      <span>Markup ({markupPercent}%)</span>
-      <span>{formatCurrency(markupAmount)}</span>
-    </div>
-
-{lineItems.some((item) => item.tax_enabled) && (
-  <div className="space-y-1">
-    {Object.entries(
-      lineItems.reduce<Record<string, number>>((acc, item) => {
-        if (!item.tax_enabled) return acc;
-
-        const label = `${item.tax_label || "Tax"} ${Number(
-          item.tax_rate || 0
-        )}%`;
-
-        acc[label] = (acc[label] || 0) + Number(item.tax_amount || 0);
-        return acc;
-      }, {})
-    ).map(([label, amount]) => (
-      <div
-        key={label}
-        className="flex items-center justify-between"
-        style={{ color: "#111827" }}
-      >
-        <span>{label}</span>
-        <span>{formatCurrency(amount)}</span>
-      </div>
-    ))}
-
-    <div
-      className="flex items-center justify-between"
-      style={{ color: "#111827" }}
-    >
-      <span>Total Tax</span>
-      <span>
-        {formatCurrency(
-          lineItems.reduce(
-            (sum, item) => sum + Number(item.tax_amount || 0),
-            0
-          )
-        )}
-      </span>
-    </div>
-  </div>
-)}
-
-    <div
-      className="flex items-center justify-between pt-3 text-lg font-bold"
-      style={{ color: "#000000", borderTop: "1px solid #000000" }}
-    >
-      <span>Total</span>
-      <span>{formatCurrency(finalTotal)}</span>
-    </div>
-  </div>
-</div>
-
-          {photos.length > 0 && (
-            <div className="mb-8">
-              <h2 className="mb-4 text-xl font-bold" style={{ color: "#000000" }}>
-                Project Photos
-              </h2>
-
-              <div className="grid grid-cols-2 gap-4">
-                {photos.map((photo) => (
-                  <div
-                    key={photo.id}
-                    className="photo-card overflow-hidden rounded-xl"
-                    style={{
-                      border: "1px solid #d1d5db",
-                      backgroundColor: "#ffffff",
-                    }}
-                  >
-                    <img
-                      src={photo.image_url}
-                      alt={photo.caption || "Project photo"}
-                      className="h-64 w-full object-cover"
-                    />
-
-                    {photo.caption && (
-                      <div className="p-3">
-                        <p className="text-sm" style={{ color: "#111827" }}>
-                          {photo.caption}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {estimate.notes && (
-            <div className="mb-6 rounded-xl p-4" style={{ border: "1px solid #d1d5db" }}>
-              <p className="mb-2 text-xs font-bold uppercase tracking-wide" style={{ color: "#1f2937" }}>
-                Notes
-              </p>
-              <p className="text-sm" style={{ color: "#111827" }}>
-                {estimate.notes}
-              </p>
-            </div>
-          )}
-
-          {estimate.exclusions && (
-            <div className="mb-6 rounded-xl p-4" style={{ border: "1px solid #d1d5db" }}>
-              <p className="mb-2 text-xs font-bold uppercase tracking-wide" style={{ color: "#1f2937" }}>
-                Exclusions
-              </p>
-              <p className="text-sm" style={{ color: "#111827" }}>
-                {estimate.exclusions}
-              </p>
-            </div>
-          )}
-
-          {defaultTerms && (
-            <div className="mb-10 rounded-xl p-4" style={{ border: "1px solid #d1d5db" }}>
-              <p className="mb-2 text-xs font-bold uppercase tracking-wide" style={{ color: "#1f2937" }}>
-                Terms
-              </p>
-              <p className="whitespace-pre-line text-sm" style={{ color: "#111827" }}>
-                {defaultTerms}
-              </p>
-            </div>
-          )}
-
-<div className="mt-16">
-  <p
-    className="mb-4 text-xs font-bold uppercase tracking-wide"
-    style={{ color: "#1f2937" }}
-  >
-    Acceptance
-  </p>
-
-  <p className="mb-10 text-sm" style={{ color: "#111827" }}>
-    By signing below, the customer accepts this estimate and authorizes
-    work to proceed according to the terms outlined above.
-  </p>
-
-  <div className="flex flex-wrap gap-12">
-    <div className="w-80">
-      {estimate.signature_data ? (
-        <div>
-          <img
-            src={estimate.signature_data}
-            alt="Customer signature"
-            className="mb-2 h-32 object-contain"
-          />
-
           <div
-            className="pt-2 text-sm"
+            className="p-10"
             style={{
-              borderTop: "1px solid #000000",
-              color: "#111827",
+              borderTop: `8px solid ${BRAND_ORANGE}`,
             }}
           >
-            {estimate.approved_by_name || "Customer Signature"}
+            <div className="mb-10 flex items-start justify-between gap-8">
+              <div className="max-w-[60%]">
+                {companySettings?.logo_url ? (
+                  <img
+                    src={companySettings.logo_url}
+                    alt="Company logo"
+                    className="mb-4 max-h-20"
+                  />
+                ) : null}
+
+                <h1
+                  className="text-3xl font-bold"
+                  style={{ color: BRAND_NAVY }}
+                >
+                  {companyName}
+                </h1>
+
+                {companyAddress && (
+                  <p className="mt-2 text-sm" style={{ color: "#111827" }}>
+                    {companyAddress}
+                  </p>
+                )}
+
+                <div
+                  className="mt-2 space-y-1 text-sm"
+                  style={{ color: "#111827" }}
+                >
+                  {companyPhone && <p>{companyPhone}</p>}
+                  {companyEmail && <p>{companyEmail}</p>}
+                  {companyTaxId && <p>Tax ID / EIN: {companyTaxId}</p>}
+                  {companyLicense && <p>License #: {companyLicense}</p>}
+                </div>
+              </div>
+
+              <div
+                className="min-w-[260px] overflow-hidden rounded-xl"
+                style={{ border: `1px solid ${BRAND_NAVY}` }}
+              >
+                <div
+                  className="px-4 py-3"
+                  style={{ backgroundColor: BRAND_NAVY }}
+                >
+                  <p className="text-xs font-bold uppercase tracking-wide text-white">
+                    Estimate
+                  </p>
+                </div>
+
+                <div className="space-y-1 p-4 text-sm">
+                  <p style={{ color: "#111827" }}>
+                    <span style={{ fontWeight: 700, color: BRAND_NAVY }}>
+                      Estimate #:
+                    </span>{" "}
+                    {estimate.estimate_number || "—"}
+                  </p>
+                  <p style={{ color: "#111827" }}>
+                    <span style={{ fontWeight: 700, color: BRAND_NAVY }}>
+                      Date:
+                    </span>{" "}
+                    {formatDate(estimate.created_at)}
+                  </p>
+                  <p style={{ color: "#111827" }}>
+                    <span style={{ fontWeight: 700, color: BRAND_NAVY }}>
+                      Valid Until:
+                    </span>{" "}
+                    {formatDate(estimate.valid_until)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mb-8 grid gap-6 md:grid-cols-2">
+              <div
+                className="rounded-xl p-4"
+                style={{
+                  border: "1px solid #d1d5db",
+                  borderLeft: `5px solid ${BRAND_ORANGE}`,
+                }}
+              >
+                <p
+                  className="mb-2 text-xs font-bold uppercase tracking-wide"
+                  style={{ color: BRAND_NAVY }}
+                >
+                  Customer
+                </p>
+                <p style={{ fontWeight: 700, color: BRAND_NAVY }}>
+                  {estimate.customer_name || "—"}
+                </p>
+                {estimate.customer_address && (
+                  <p className="text-sm" style={{ color: "#111827" }}>
+                    {estimate.customer_address}
+                  </p>
+                )}
+                {estimate.customer_phone && (
+                  <p className="text-sm" style={{ color: "#111827" }}>
+                    {estimate.customer_phone}
+                  </p>
+                )}
+                {estimate.customer_email && (
+                  <p className="text-sm" style={{ color: "#111827" }}>
+                    {estimate.customer_email}
+                  </p>
+                )}
+              </div>
+
+              <div
+                className="rounded-xl p-4"
+                style={{
+                  border: "1px solid #d1d5db",
+                  borderLeft: `5px solid ${BRAND_ORANGE}`,
+                }}
+              >
+                <p
+                  className="mb-2 text-xs font-bold uppercase tracking-wide"
+                  style={{ color: BRAND_NAVY }}
+                >
+                  Project
+                </p>
+                <p style={{ fontWeight: 700, color: BRAND_NAVY }}>
+                  {estimate.job_name || "—"}
+                </p>
+                {estimate.project_description && (
+                  <p className="text-sm" style={{ color: "#111827" }}>
+                    {estimate.project_description}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="mb-8">
+              <h2
+                className="mb-3 text-xl font-bold"
+                style={{ color: BRAND_NAVY }}
+              >
+                Line Items
+              </h2>
+
+              <div
+                className="overflow-hidden rounded-xl"
+                style={{ border: "1px solid #d1d5db" }}
+              >
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr style={{ backgroundColor: BRAND_NAVY }}>
+                      <th className="px-4 py-3 text-left text-sm text-white">
+                        Description
+                      </th>
+                      <th className="px-4 py-3 text-right text-sm text-white">
+                        Quantity
+                      </th>
+                      <th className="px-4 py-3 text-right text-sm text-white">
+                        Rate
+                      </th>
+                      <th className="px-4 py-3 text-right text-sm text-white">
+                        Total
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {lineItems.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={4}
+                          className="px-4 py-4 text-sm"
+                          style={{ color: BRAND_NAVY }}
+                        >
+                          No line items.
+                        </td>
+                      </tr>
+                    ) : (
+                      lineItems.map((item) => {
+                        const lineTotal =
+                          Number(item.quantity || 0) * Number(item.rate || 0);
+
+                        const showQtyRate = item.show_quantity_rate ?? true;
+
+                        return (
+                          <tr
+                            key={item.id}
+                            style={{ borderTop: "1px solid #d1d5db" }}
+                          >
+                            <td
+                              className="px-4 py-3 text-sm"
+                              style={{ color: "#111827" }}
+                            >
+                              <p style={{ fontWeight: 700, color: BRAND_NAVY }}>
+                                {item.type}
+                              </p>
+
+                              {item.description && (
+                                <p
+                                  className="mt-1 whitespace-pre-line text-xs"
+                                  style={{ color: BRAND_SLATE }}
+                                >
+                                  {item.description}
+                                </p>
+                              )}
+                            </td>
+
+                            <td
+                              className="px-4 py-3 text-right text-sm"
+                              style={{ color: "#111827" }}
+                            >
+                              {showQtyRate ? item.quantity : ""}
+                            </td>
+
+                            <td
+                              className="px-4 py-3 text-right text-sm"
+                              style={{ color: "#111827" }}
+                            >
+                              {showQtyRate
+                                ? formatCurrency(Number(item.rate || 0))
+                                : ""}
+                            </td>
+
+                            <td
+                              className="px-4 py-3 text-right text-sm font-semibold"
+                              style={{ color: BRAND_NAVY }}
+                            >
+                              {formatCurrency(lineTotal)}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div
+                className="total-card ml-auto mt-6 w-full max-w-sm space-y-2 rounded-xl p-5"
+                style={{
+                  backgroundColor: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                }}
+              >
+                <div
+                  className="flex items-center justify-between text-sm"
+                  style={{ color: "#111827" }}
+                >
+                  <span>Subtotal</span>
+                  <span>{formatCurrency(subtotal)}</span>
+                </div>
+
+                <div
+                  className="flex items-center justify-between text-sm"
+                  style={{ color: "#111827" }}
+                >
+                  <span>Markup ({markupPercent}%)</span>
+                  <span>{formatCurrency(markupAmount)}</span>
+                </div>
+
+                {lineItems.some((item) => item.tax_enabled) && (
+                  <div className="space-y-1">
+                    {Object.entries(
+                      lineItems.reduce<Record<string, number>>((acc, item) => {
+                        if (!item.tax_enabled) return acc;
+
+                        const label = `${item.tax_label || "Tax"} ${Number(
+                          item.tax_rate || 0
+                        )}%`;
+
+                        acc[label] =
+                          (acc[label] || 0) + Number(item.tax_amount || 0);
+
+                        return acc;
+                      }, {})
+                    ).map(([label, amount]) => (
+                      <div
+                        key={label}
+                        className="flex items-center justify-between text-sm"
+                        style={{ color: "#111827" }}
+                      >
+                        <span>{label}</span>
+                        <span>{formatCurrency(amount)}</span>
+                      </div>
+                    ))}
+
+                    <div
+                      className="flex items-center justify-between text-sm"
+                      style={{ color: "#111827" }}
+                    >
+                      <span>Total Tax</span>
+                      <span>
+                        {formatCurrency(
+                          lineItems.reduce(
+                            (sum, item) => sum + Number(item.tax_amount || 0),
+                            0
+                          )
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <div
+                  className="flex items-center justify-between pt-4 text-xl font-black"
+                  style={{
+                    color: BRAND_NAVY,
+                    borderTop: `3px solid ${BRAND_ORANGE}`,
+                    marginTop: "12px",
+                  }}
+                >
+                  <span>Total</span>
+                  <span>{formatCurrency(finalTotal)}</span>
+                </div>
+              </div>
+            </div>
+
+            {photos.length > 0 && (
+              <div className="mb-8">
+                <h2
+                  className="mb-4 text-xl font-bold"
+                  style={{ color: BRAND_NAVY }}
+                >
+                  Project Photos
+                </h2>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {photos.map((photo) => (
+                    <div
+                      key={photo.id}
+                      className="photo-card overflow-hidden rounded-xl"
+                      style={{
+                        border: "1px solid #d1d5db",
+                        backgroundColor: "#ffffff",
+                      }}
+                    >
+                      <img
+                        src={photo.image_url}
+                        alt={photo.caption || "Project photo"}
+                        className="h-64 w-full object-cover"
+                      />
+
+                      {photo.caption && (
+                        <div className="p-3">
+                          <p className="text-sm" style={{ color: "#111827" }}>
+                            {photo.caption}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {estimate.notes && (
+              <div
+                className="mb-6 rounded-xl p-4"
+                style={{ border: "1px solid #d1d5db" }}
+              >
+                <p
+                  className="mb-2 text-xs font-bold uppercase tracking-wide"
+                  style={{ color: BRAND_NAVY }}
+                >
+                  Notes
+                </p>
+                <p className="text-sm" style={{ color: "#111827" }}>
+                  {estimate.notes}
+                </p>
+              </div>
+            )}
+
+            {estimate.exclusions && (
+              <div
+                className="mb-6 rounded-xl p-4"
+                style={{ border: "1px solid #d1d5db" }}
+              >
+                <p
+                  className="mb-2 text-xs font-bold uppercase tracking-wide"
+                  style={{ color: BRAND_NAVY }}
+                >
+                  Exclusions
+                </p>
+                <p className="text-sm" style={{ color: "#111827" }}>
+                  {estimate.exclusions}
+                </p>
+              </div>
+            )}
+
+            {defaultTerms && (
+              <div
+                className="mb-10 rounded-xl p-4"
+                style={{ border: "1px solid #d1d5db" }}
+              >
+                <p
+                  className="mb-2 text-xs font-bold uppercase tracking-wide"
+                  style={{ color: BRAND_NAVY }}
+                >
+                  Terms
+                </p>
+                <p
+                  className="whitespace-pre-line text-sm"
+                  style={{ color: "#111827" }}
+                >
+                  {defaultTerms}
+                </p>
+              </div>
+            )}
+
+            <div
+              className="signature-card mt-16 rounded-xl p-6"
+              style={{
+                backgroundColor: "#f8fafc",
+                border: "1px solid #e2e8f0",
+              }}
+            >
+              <p
+                className="mb-4 text-xs font-bold uppercase tracking-wide"
+                style={{ color: BRAND_NAVY }}
+              >
+                Acceptance
+              </p>
+
+              <p className="mb-10 text-sm" style={{ color: "#111827" }}>
+                By signing below, the customer accepts this estimate and
+                authorizes work to proceed according to the terms outlined
+                above.
+              </p>
+
+              <div className="flex flex-wrap gap-12">
+                <div className="w-80">
+                  {estimate.signature_data ? (
+                    <div>
+                      <img
+                        src={estimate.signature_data}
+                        alt="Customer signature"
+                        className="mb-2 h-32 object-contain"
+                      />
+
+                      <div
+                        className="pt-2 text-sm"
+                        style={{
+                          borderTop: `2px solid ${BRAND_NAVY}`,
+                          color: "#111827",
+                        }}
+                      >
+                        {estimate.approved_by_name || "Customer Signature"}
+                      </div>
+
+                      {estimate.approved_by_email && (
+                        <>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {estimate.approved_by_email}
+                          </p>
+                          <p className="mt-1 text-[11px] text-slate-400">
+                            Electronically signed via TrueAngle
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  ) : (
+                    <div
+                      className="pt-2 text-sm"
+                      style={{
+                        borderTop: `2px solid ${BRAND_NAVY}`,
+                        color: "#111827",
+                      }}
+                    >
+                      Customer Signature
+                    </div>
+                  )}
+                </div>
+
+                <div className="w-56">
+                  <div
+                    className="pt-2 text-sm"
+                    style={{
+                      borderTop: `2px solid ${BRAND_NAVY}`,
+                      color: "#111827",
+                    }}
+                  >
+                    {formatDateTime(estimate.signed_at)}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <p
+              className="mt-8 text-center text-[11px]"
+              style={{ color: BRAND_SLATE }}
+            >
+              Generated securely with TrueAngle
+            </p>
           </div>
-
-          {estimate.approved_by_email && (
-            <>
-              <p className="mt-1 text-xs text-slate-500">
-                {estimate.approved_by_email}
-              </p>
-              <p className="mt-1 text-[11px] text-slate-400">
-                Electronically signed via TrueAngle
-              </p>
-            </>
-          )}
-        </div>
-      ) : (
-        <div
-          className="pt-2 text-sm"
-          style={{
-            borderTop: "1px solid #000000",
-            color: "#111827",
-          }}
-        >
-          Customer Signature
-        </div>
-      )}
-    </div>
-
-    <div className="w-48">
-      <div
-        className="pt-2 text-sm"
-        style={{
-          borderTop: "1px solid #000000",
-          color: "#111827",
-        }}
-      >
-        {estimate.signed_at
-           ? new Date(estimate.signed_at).toLocaleString("en-US")
-           : "Date"}
-      </div>
-    </div>
-  </div>
-</div>
         </div>
       </main>
     </>
