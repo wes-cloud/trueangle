@@ -31,6 +31,12 @@ type Estimate = {
   estimate_number?: string | null;
   amount: number | null;
   markup_percent?: number | null;
+
+  approved_by_name?: string | null;
+  approved_by_email?: string | null;
+  signature_data?: string | null;
+  signed_at?: string | null;
+
   created_at: string | null;
 };
 
@@ -126,6 +132,10 @@ export default function EstimatePrintPage() {
           estimate_number,
           amount,
           markup_percent,
+          approved_by_name,
+          approved_by_email,
+          signature_data,
+          signed_at,
           created_at
         `
         )
@@ -564,29 +574,73 @@ export default function EstimatePrintPage() {
             </div>
           )}
 
-          <div className="mt-16">
-            <p className="mb-4 text-xs font-bold uppercase tracking-wide" style={{ color: "#1f2937" }}>
-              Acceptance
-            </p>
-            <p className="mb-10 text-sm" style={{ color: "#111827" }}>
-              By signing below, the customer accepts this estimate and authorizes
-              work to proceed according to the terms outlined above.
-            </p>
+<div className="mt-16">
+  <p
+    className="mb-4 text-xs font-bold uppercase tracking-wide"
+    style={{ color: "#1f2937" }}
+  >
+    Acceptance
+  </p>
 
-            <div className="flex flex-wrap gap-12">
-              <div className="w-72">
-                <div className="pt-2 text-sm" style={{ borderTop: "1px solid #000000", color: "#111827" }}>
-                  Customer Signature
-                </div>
-              </div>
+  <p className="mb-10 text-sm" style={{ color: "#111827" }}>
+    By signing below, the customer accepts this estimate and authorizes
+    work to proceed according to the terms outlined above.
+  </p>
 
-              <div className="w-48">
-                <div className="pt-2 text-sm" style={{ borderTop: "1px solid #000000", color: "#111827" }}>
-                  Date
-                </div>
-              </div>
-            </div>
+  <div className="flex flex-wrap gap-12">
+    <div className="w-80">
+      {estimate.signature_data ? (
+        <div>
+          <img
+            src={estimate.signature_data}
+            alt="Customer signature"
+            className="mb-2 h-24 object-contain"
+          />
+
+          <div
+            className="pt-2 text-sm"
+            style={{
+              borderTop: "1px solid #000000",
+              color: "#111827",
+            }}
+          >
+            {estimate.approved_by_name || "Customer Signature"}
           </div>
+
+          {estimate.approved_by_email && (
+            <p className="mt-1 text-xs text-slate-500">
+              {estimate.approved_by_email}
+            </p>
+          )}
+        </div>
+      ) : (
+        <div
+          className="pt-2 text-sm"
+          style={{
+            borderTop: "1px solid #000000",
+            color: "#111827",
+          }}
+        >
+          Customer Signature
+        </div>
+      )}
+    </div>
+
+    <div className="w-48">
+      <div
+        className="pt-2 text-sm"
+        style={{
+          borderTop: "1px solid #000000",
+          color: "#111827",
+        }}
+      >
+        {estimate.signed_at
+          ? formatDate(estimate.signed_at)
+          : "Date"}
+      </div>
+    </div>
+  </div>
+</div>
         </div>
       </main>
     </>
