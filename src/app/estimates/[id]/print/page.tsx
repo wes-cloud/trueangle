@@ -594,7 +594,7 @@ export default function EstimatePrintPage() {
           <img
             src={estimate.signature_data}
             alt="Customer signature"
-            className="mb-2 h-24 object-contain"
+            className="mb-2 h-32 object-contain"
           />
 
           <div
@@ -608,9 +608,14 @@ export default function EstimatePrintPage() {
           </div>
 
           {estimate.approved_by_email && (
-            <p className="mt-1 text-xs text-slate-500">
-              {estimate.approved_by_email}
-            </p>
+            <>
+              <p className="mt-1 text-xs text-slate-500">
+                {estimate.approved_by_email}
+              </p>
+              <p className="mt-1 text-[11px] text-slate-400">
+                Electronically signed via TrueAngle
+              </p>
+            </>
           )}
         </div>
       ) : (
