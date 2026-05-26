@@ -74,6 +74,12 @@ function formatDate(value?: string | null) {
   return date.toLocaleDateString("en-US");
 }
 
+
+// Brand colors used in the print page
+const BRAND_NAVY = "#0f172a";
+const BRAND_ORANGE = "#f97316";
+const BRAND_SLATE = "#475569";
+
 function getLineItemsTotal(items: { quantity: number; rate: number }[]) {
   return items.reduce(
     (sum, item) => sum + Number(item.quantity || 0) * Number(item.rate || 0),
@@ -295,6 +301,7 @@ export default function EstimatePrintPage() {
             backgroundColor: "#ffffff",
             color: "#000000",
             border: "1px solid #e5e7eb",
+            borderTop: `6px solid ${BRAND_ORANGE}`,
           }}
         >
           <div className="mb-10 flex items-start justify-between gap-8">
@@ -640,8 +647,8 @@ export default function EstimatePrintPage() {
         }}
       >
         {estimate.signed_at
-          ? formatDate(estimate.signed_at)
-          : "Date"}
+           ? new Date(estimate.signed_at).toLocaleString("en-US")
+           : "Date"}
       </div>
     </div>
   </div>
