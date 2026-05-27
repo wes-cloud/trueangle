@@ -504,77 +504,99 @@ export default function InvoicesPage() {
     await setInvoiceStatus(invoice.id, "paid");
   }
 
-  async function handleCreateStripePaymentLink(
-    invoice: Invoice,
-    paymentType: "deposit" | "balance" | "custom"
-  ) {
-    if (!user) {
-      setMessage("You must be signed in.");
-      return;
-    }
-
-    const balance = getInvoiceBalance(invoice);
-
-    if (balance <= 0) {
-      setMessage("This invoice is already paid.");
-      return;
-    }
-
-    let requestedAmount = balance;
-
-    if (paymentType === "deposit") {
-      const defaultDeposit = Math.min(
-        balance,
-        Math.round(Number(invoice.amount || 0) * 0.3 * 100) / 100
-      );
-
-      const rawDeposit = window.prompt(
-        `Enter deposit amount. Balance due is ${formatCurrency(balance)}.`,
-        String(defaultDeposit)
-      );
-
-      if (!rawDeposit) return;
-
-      requestedAmount = Number(rawDeposit);
-    }
-
-    if (!requestedAmount || requestedAmount <= 0) {
-      setMessage("Payment amount must be greater than 0.");
-      return;
-    }
-
-    if (requestedAmount > balance) {
-      setMessage("Payment amount cannot exceed the balance due.");
-      return;
-    }
-
-    setMessage("Creating Stripe payment link...");
-
-    const response = await fetch("/api/stripe/create-invoice-payment", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        invoiceId: invoice.id,
-        amount: requestedAmount,
-        paymentType,
-      }),
-    });
-
-    const data = (await response.json()) as {
-      url?: string;
-      error?: string;
-    };
-
-    if (!response.ok || !data.url) {
-      setMessage(data.error || "Unable to create payment link.");
-      return;
-    }
-
-    window.open(data.url, "_blank", "noopener,noreferrer");
-    setMessage("Stripe payment page opened.");
+async function handleCreateStripePaymentLink(
+  invoice: Invoice,
+  paymentType: "deposit" | "balance" | "custom"
+) {
+  if (!user) {
+    setMessage("You must be signed in.");
+    return;
   }
+
+  const balance = getInvoiceBalance(invoice);
+
+  if (balance <= 0) {
+    setMessage("This invoice is already paid.");
+    return;
+  }
+
+  let requestedAmount = balance;
+
+  if (paymentType === "deposit") {
+    const method = window.prompt(
+      "Enter P for percentage or D for dollar amount.",
+      "P"
+    );
+
+    if (!method) return;
+
+    if (method.toLowerCase() === "p") {
+      const rawPercent = window.prompt("Enter deposit percentage.", "30");
+
+      if (!rawPercent) return;
+
+      const percent = Number(rawPercent);
+
+      if (!percent || percent <= 0 || percent > 100) {
+        setMessage("Deposit percentage must be between 1 and 100.");
+        return;
+      }
+
+      requestedAmount = Math.round(balance * (percent / 100) * 100) / 100;
+    } else if (method.toLowerCase() === "d") {
+      const rawAmount = window.prompt(
+        `Enter deposit amount. Balance due is ${formatCurrency(balance)}.`,
+        String(Math.round(balance * 0.3 * 100) / 100)
+      );
+
+      if (!rawAmount) return;
+
+      requestedAmount = Number(rawAmount);
+    } else {
+      setMessage("Please enter P for percentage or D for dollar amount.");
+      return;
+    }
+  }
+
+  if (!requestedAmount || requestedAmount <= 0) {
+    setMessage("Payment amount must be greater than 0.");
+    return;
+  }
+
+  if (requestedAmount > balance) {
+    setMessage("Payment amount cannot exceed the balance due.");
+    return;
+  }
+
+  setMessage("Sending deposit request email...");
+
+  const response = await fetch("/api/send-invoice-deposit-email", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      invoiceId: invoice.id,
+      amount: requestedAmount,
+      paymentType,
+    }),
+  });
+
+  const data = (await response.json()) as {
+    success?: boolean;
+    paymentUrl?: string;
+    error?: string;
+  };
+
+  if (!response.ok || !data.success) {
+    setMessage(data.error || "Unable to send deposit request.");
+    return;
+  }
+
+  setMessage(
+    `Deposit request sent for ${formatCurrency(requestedAmount)}.`
+  );
+}
 
   async function updateInvoicePaymentStatus(invoiceId: string) {
     const invoice = invoices.find((item) => item.id === invoiceId);
@@ -1404,7 +1426,7 @@ export default function InvoicesPage() {
                       <button
                         type="button"
                         onClick={() => handleDeleteInvoice(invoice.id)}
-                        className="rounded-xl bg-red-600 px-3 py-1 text-white"
+                        className="rounded-xl border border-red-300 bg-white px-3 py-1 text-red-700 hover:bg-red-50"
                       >
                         Delete
                       </button>
