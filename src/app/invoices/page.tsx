@@ -1451,15 +1451,13 @@ export default function InvoicesPage() {
                             Request Deposit
                           </button>
 
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleCreateStripePaymentLink(invoice, "balance")
-                            }
-                            className="rounded-xl bg-orange-600 px-3 py-1 text-white hover:bg-orange-700"
-                          >
-                            Pay Balance
-                          </button>
+<button
+  type="button"
+  onClick={() => openDepositModal(invoice)}
+  className="rounded-xl bg-orange-600 px-3 py-1 text-white hover:bg-orange-700"
+>
+  Request Payment
+</button>
                         </>
                       )}
 
