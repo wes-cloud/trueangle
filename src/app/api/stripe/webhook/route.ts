@@ -25,7 +25,9 @@ async function saveSubscription(subscriptionId: string) {
   const priceId = subscription.items.data[0]?.price.id || null;
 
   const currentPeriodEnd = subscription.items.data[0]?.current_period_end
-    ? new Date(subscription.items.data[0].current_period_end * 1000).toISOString()
+    ? new Date(
+        subscription.items.data[0].current_period_end * 1000
+      ).toISOString()
     : null;
 
   const trialEnd = subscription.trial_end
@@ -53,6 +55,131 @@ async function saveSubscription(subscriptionId: string) {
   }
 }
 
+async function updateInvoiceStatus(invoiceId: string, userId: string) {
+  const { data: invoice, error: invoiceError } = await supabaseAdmin
+    .from("invoices")
+    .select("id, amount, status")
+    .eq("id", invoiceId)
+    .eq("user_id", userId)
+    .single();
+
+  if (invoiceError || !invoice) {
+    throw new Error(invoiceError?.message || "Invoice not found.");
+  }
+
+  const { data: payments, error: paymentsError } = await supabaseAdmin
+    .from("payments")
+    .select("amount")
+    .eq("invoice_id", invoiceId)
+    .eq("user_id", userId);
+
+  if (paymentsError) {
+    throw new Error(paymentsError.message);
+  }
+
+  const totalPaid = (payments || []).reduce(
+    (sum, payment) => sum + Number(payment.amount || 0),
+    0
+  );
+
+  const invoiceAmount = Number(invoice.amount || 0);
+
+  let nextStatus = "sent";
+
+  if (totalPaid <= 0) {
+    nextStatus = invoice.status === "draft" ? "draft" : "sent";
+  } else if (totalPaid < invoiceAmount) {
+    nextStatus = "partial";
+  } else {
+    nextStatus = "paid";
+  }
+
+  const { error: updateError } = await supabaseAdmin
+    .from("invoices")
+    .update({
+      status: nextStatus,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", invoiceId)
+    .eq("user_id", userId);
+
+  if (updateError) {
+    throw new Error(updateError.message);
+  }
+}
+
+async function saveInvoicePayment(session: Stripe.Checkout.Session) {
+  if (session.mode !== "payment") return;
+
+  const metadata = session.metadata || {};
+
+  if (metadata.type !== "invoice_payment") return;
+
+  if (session.payment_status !== "paid") {
+    return;
+  }
+
+  const invoiceId = metadata.invoice_id;
+  const userId = metadata.user_id;
+  const paymentType = metadata.payment_type || "custom";
+
+  if (!invoiceId || !userId) {
+    throw new Error("Missing invoice payment metadata.");
+  }
+
+  const stripeCheckoutSessionId = session.id;
+  const stripePaymentIntentId =
+    typeof session.payment_intent === "string"
+      ? session.payment_intent
+      : session.payment_intent?.id || null;
+
+  const amountPaid = Number(session.amount_total || 0) / 100;
+
+  if (!amountPaid || amountPaid <= 0) {
+    throw new Error("Stripe session has no paid amount.");
+  }
+
+  const { data: existingPayment, error: existingError } = await supabaseAdmin
+    .from("payments")
+    .select("id")
+    .eq("notes", `Stripe Checkout Session: ${stripeCheckoutSessionId}`)
+    .maybeSingle();
+
+  if (existingError) {
+    throw new Error(existingError.message);
+  }
+
+  if (!existingPayment) {
+    const { error: insertError } = await supabaseAdmin.from("payments").insert([
+      {
+        user_id: userId,
+        invoice_id: invoiceId,
+        amount: amountPaid,
+        payment_date: new Date().toISOString().slice(0, 10),
+        payment_method: "Stripe",
+        notes: `Stripe Checkout Session: ${stripeCheckoutSessionId}`,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ]);
+
+    if (insertError) {
+      throw new Error(insertError.message);
+    }
+  }
+
+  await updateInvoiceStatus(invoiceId, userId);
+
+  console.log("Saved invoice payment", {
+    invoiceId,
+    userId,
+    paymentType,
+    amountPaid,
+    stripeCheckoutSessionId,
+    stripePaymentIntentId,
+  });
+}
+
 export async function POST(request: Request) {
   const body = await request.text();
   const signature = request.headers.get("stripe-signature");
@@ -74,6 +201,7 @@ export async function POST(request: Request) {
     );
   } catch (err) {
     const error = err as Error;
+
     return NextResponse.json(
       { error: `Webhook signature failed: ${error.message}` },
       { status: 400 }
@@ -83,6 +211,10 @@ export async function POST(request: Request) {
   try {
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
+
+      if (session.mode === "payment") {
+        await saveInvoicePayment(session);
+      }
 
       if (typeof session.subscription === "string") {
         await saveSubscription(session.subscription);

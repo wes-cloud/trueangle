@@ -311,62 +311,62 @@ export default function InvoicesPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-async function handleDeleteInvoice(id: string) {
-  if (!user) {
-    setMessage("You must be signed in.");
-    return;
-  }
+  async function handleDeleteInvoice(id: string) {
+    if (!user) {
+      setMessage("You must be signed in.");
+      return;
+    }
 
-  const confirmed = window.confirm(
-    "Delete this invoice? This will also delete any payments recorded for it."
-  );
+    const confirmed = window.confirm(
+      "Delete this invoice? This will also delete any payments recorded for it."
+    );
 
-  if (!confirmed) return;
+    if (!confirmed) return;
 
-  setMessage("Deleting invoice...");
+    setMessage("Deleting invoice...");
 
-  const invoiceToDelete = invoices.find((invoice) => invoice.id === id);
+    const invoiceToDelete = invoices.find((invoice) => invoice.id === id);
 
-  const { error: paymentsError } = await supabase
-    .from("payments")
-    .delete()
-    .eq("invoice_id", id)
-    .eq("user_id", user.id);
-
-  if (paymentsError) {
-    setMessage(`Error deleting invoice payments: ${paymentsError.message}`);
-    return;
-  }
-
-  const { error: invoiceError } = await supabase
-    .from("invoices")
-    .delete()
-    .eq("id", id)
-    .eq("user_id", user.id);
-
-  if (invoiceError) {
-    setMessage(`Error deleting invoice: ${invoiceError.message}`);
-    return;
-  }
-
-  if (invoiceToDelete?.estimate_id) {
-    await supabase
-      .from("estimates")
-      .update({
-        status: "approved",
-        converted_invoice_id: null,
-      })
-      .eq("id", invoiceToDelete.estimate_id)
+    const { error: paymentsError } = await supabase
+      .from("payments")
+      .delete()
+      .eq("invoice_id", id)
       .eq("user_id", user.id);
-  }
 
-  if (editingId === id) {
-    resetForm();
-  }
+    if (paymentsError) {
+      setMessage(`Error deleting invoice payments: ${paymentsError.message}`);
+      return;
+    }
 
-  setMessage("Invoice deleted.");
-  await loadPageData(user.id);
-}
+    const { error: invoiceError } = await supabase
+      .from("invoices")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id);
+
+    if (invoiceError) {
+      setMessage(`Error deleting invoice: ${invoiceError.message}`);
+      return;
+    }
+
+    if (invoiceToDelete?.estimate_id) {
+      await supabase
+        .from("estimates")
+        .update({
+          status: "approved",
+          converted_invoice_id: null,
+        })
+        .eq("id", invoiceToDelete.estimate_id)
+        .eq("user_id", user.id);
+    }
+
+    if (editingId === id) {
+      resetForm();
+    }
+
+    setMessage("Invoice deleted.");
+    await loadPageData(user.id);
+  }
 
   async function handleSaveInvoice(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -502,6 +502,78 @@ async function handleDeleteInvoice(id: string) {
     }
 
     await setInvoiceStatus(invoice.id, "paid");
+  }
+
+  async function handleCreateStripePaymentLink(
+    invoice: Invoice,
+    paymentType: "deposit" | "balance" | "custom"
+  ) {
+    if (!user) {
+      setMessage("You must be signed in.");
+      return;
+    }
+
+    const balance = getInvoiceBalance(invoice);
+
+    if (balance <= 0) {
+      setMessage("This invoice is already paid.");
+      return;
+    }
+
+    let requestedAmount = balance;
+
+    if (paymentType === "deposit") {
+      const defaultDeposit = Math.min(
+        balance,
+        Math.round(Number(invoice.amount || 0) * 0.3 * 100) / 100
+      );
+
+      const rawDeposit = window.prompt(
+        `Enter deposit amount. Balance due is ${formatCurrency(balance)}.`,
+        String(defaultDeposit)
+      );
+
+      if (!rawDeposit) return;
+
+      requestedAmount = Number(rawDeposit);
+    }
+
+    if (!requestedAmount || requestedAmount <= 0) {
+      setMessage("Payment amount must be greater than 0.");
+      return;
+    }
+
+    if (requestedAmount > balance) {
+      setMessage("Payment amount cannot exceed the balance due.");
+      return;
+    }
+
+    setMessage("Creating Stripe payment link...");
+
+    const response = await fetch("/api/stripe/create-invoice-payment", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        invoiceId: invoice.id,
+        amount: requestedAmount,
+        paymentType,
+      }),
+    });
+
+    const data = (await response.json()) as {
+      url?: string;
+      error?: string;
+    };
+
+    if (!response.ok || !data.url) {
+      setMessage(data.error || "Unable to create payment link.");
+      return;
+    }
+
+    window.open(data.url, "_blank", "noopener,noreferrer");
+    setMessage("Stripe payment page opened.");
   }
 
   async function updateInvoicePaymentStatus(invoiceId: string) {
@@ -839,10 +911,20 @@ async function handleDeleteInvoice(id: string) {
           </div>
 
           <div className="mt-6 grid gap-4 md:grid-cols-4">
-            <StatCard label="Total Invoiced" value={formatCurrency(invoiceStats.totalInvoiced)} />
+            <StatCard
+              label="Total Invoiced"
+              value={formatCurrency(invoiceStats.totalInvoiced)}
+            />
             <StatCard label="Paid" value={formatCurrency(invoiceStats.totalPaid)} />
-            <StatCard label="Outstanding" value={formatCurrency(invoiceStats.outstanding)} />
-            <StatCard label="Overdue" value={formatCurrency(invoiceStats.overdue)} danger={invoiceStats.overdue > 0} />
+            <StatCard
+              label="Outstanding"
+              value={formatCurrency(invoiceStats.outstanding)}
+            />
+            <StatCard
+              label="Overdue"
+              value={formatCurrency(invoiceStats.overdue)}
+              danger={invoiceStats.overdue > 0}
+            />
           </div>
         </section>
 
@@ -938,8 +1020,12 @@ async function handleDeleteInvoice(id: string) {
                   {estimates.map((estimate) => (
                     <option key={estimate.id} value={estimate.id}>
                       {estimate.job_name || "Untitled Job"}
-                      {estimate.customer_name ? ` - ${estimate.customer_name}` : ""}
-                      {estimate.estimate_number ? ` (${estimate.estimate_number})` : ""}
+                      {estimate.customer_name
+                        ? ` - ${estimate.customer_name}`
+                        : ""}
+                      {estimate.estimate_number
+                        ? ` (${estimate.estimate_number})`
+                        : ""}
                     </option>
                   ))}
                 </select>
@@ -1023,7 +1109,9 @@ async function handleDeleteInvoice(id: string) {
                   <button
                     type="button"
                     onClick={() => {
-                      const invoice = invoices.find((item) => item.id === editingId);
+                      const invoice = invoices.find(
+                        (item) => item.id === editingId
+                      );
                       if (invoice) markInvoicePaid(invoice);
                     }}
                     className="rounded-xl bg-green-600 px-4 py-2 text-white"
@@ -1041,9 +1129,19 @@ async function handleDeleteInvoice(id: string) {
         {editingId && (
           <>
             <section className="grid gap-4 md:grid-cols-3">
-              <StatCard label="Invoice Total" value={formatCurrency(currentInvoiceAmount)} />
-              <StatCard label="Total Paid" value={formatCurrency(currentInvoiceTotalPaid)} />
-              <StatCard label="Balance Due" value={formatCurrency(currentBalanceDue)} danger={currentBalanceDue > 0} />
+              <StatCard
+                label="Invoice Total"
+                value={formatCurrency(currentInvoiceAmount)}
+              />
+              <StatCard
+                label="Total Paid"
+                value={formatCurrency(currentInvoiceTotalPaid)}
+              />
+              <StatCard
+                label="Balance Due"
+                value={formatCurrency(currentBalanceDue)}
+                danger={currentBalanceDue > 0}
+              />
             </section>
 
             <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
@@ -1277,6 +1375,30 @@ async function handleDeleteInvoice(id: string) {
                         >
                           Mark Paid
                         </button>
+                      )}
+
+                      {balance > 0 && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleCreateStripePaymentLink(invoice, "deposit")
+                            }
+                            className="rounded-xl bg-orange-600 px-3 py-1 text-white"
+                          >
+                            Request Deposit
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleCreateStripePaymentLink(invoice, "balance")
+                            }
+                            className="rounded-xl bg-indigo-600 px-3 py-1 text-white"
+                          >
+                            Pay Balance
+                          </button>
+                        </>
                       )}
 
                       <button
