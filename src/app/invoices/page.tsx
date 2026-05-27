@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import AppNav from "@/components/AppNav";
+import PaymentsModal from "@/components/PaymentsModal";
 import { supabase } from "@/lib/supabase";
 
 type AuthUser = {
@@ -147,6 +148,8 @@ export default function InvoicesPage() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [paymentsModalInvoice, setPaymentsModalInvoice] =
+  useState<Invoice | null>(null);
 
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentDate, setPaymentDate] = useState("");
@@ -1403,73 +1406,51 @@ export default function InvoicesPage() {
                       </div>
                     </div>
 
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleEdit(invoice)}
-                        className="rounded-xl border border-gray-300 bg-white px-3 py-1 text-gray-800 hover:bg-gray-100"
-                      >
-                        Edit
-                      </button>
+<div className="mt-4 flex flex-wrap gap-2">
+  <button
+    type="button"
+    onClick={() => handleEdit(invoice)}
+    className="rounded-xl border border-gray-300 bg-white px-3 py-1 text-gray-800 hover:bg-gray-100"
+  >
+    Edit
+  </button>
 
-                      <a
-                        href={`/invoices/${invoice.id}/print`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="rounded-xl border border-gray-300 bg-white px-3 py-1 text-gray-800 hover:bg-gray-100"
-                      >
-                        Print
-                      </a>
+  <a
+    href={`/invoices/${invoice.id}/print`}
+    target="_blank"
+    rel="noreferrer"
+    className="rounded-xl border border-gray-300 bg-white px-3 py-1 text-gray-800 hover:bg-gray-100"
+  >
+    Print
+  </a>
 
-                      {invoice.status !== "sent" && invoice.status !== "paid" && (
-                        <button
-                          type="button"
-                          onClick={() => setInvoiceStatus(invoice.id, "sent")}
-                          className="rounded-xl bg-slate-700 px-3 py-1 text-white hover:bg-slate-600"
-                        >
-                          Mark Sent
-                        </button>
-                      )}
+  {invoice.status !== "sent" && invoice.status !== "paid" && (
+    <button
+      type="button"
+      onClick={() => setInvoiceStatus(invoice.id, "sent")}
+      className="rounded-xl bg-slate-700 px-3 py-1 text-white hover:bg-slate-600"
+    >
+      Mark Sent
+    </button>
+  )}
 
-                      {invoice.status !== "paid" && (
-                        <button
-                          type="button"
-                          onClick={() => markInvoicePaid(invoice)}
-                          className="rounded-xl bg-slate-900 px-3 py-1 text-white hover:bg-slate-800"
-                        >
-                          Mark Paid
-                        </button>
-                      )}
+  <button
+    type="button"
+    onClick={() => setPaymentsModalInvoice(invoice)}
+    className="rounded-xl bg-orange-600 px-3 py-1 text-white hover:bg-orange-700"
+  >
+    Payments
+  </button>
 
-                      {balance > 0 && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => openDepositModal(invoice)}
-                            className="rounded-xl bg-orange-600 px-3 py-1 text-white hover:bg-orange-700"
-                          >
-                            Request Deposit
-                          </button>
-
-<button
-  type="button"
-  onClick={() => openDepositModal(invoice)}
-  className="rounded-xl bg-orange-600 px-3 py-1 text-white hover:bg-orange-700"
->
-  Request Payment
-</button>
-                        </>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteInvoice(invoice.id)}
-                        className="rounded-xl border border-red-300 bg-white px-3 py-1 text-red-700 hover:bg-red-50"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
+  <button
+    type="button"
+    onClick={() => handleDeleteInvoice(invoice.id)}
+    className="rounded-xl border border-red-300 bg-white px-3 py-1 text-red-700 hover:bg-red-50"
+  >
+    Delete
+  </button>
+</div>
+           </div>
                 );
               })}
             </div>
@@ -1477,114 +1458,17 @@ export default function InvoicesPage() {
         </section>
       </div>
 
-      {depositModalInvoice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
-            <div className="border-b border-gray-200 p-6">
-              <h2 className="text-2xl font-bold text-gray-900">
-                Request Payment
-              </h2>
-              <p className="mt-2 text-sm text-gray-600">
-                Send a payment request to your customer by email.
-              </p>
-            </div>
-
-            <div className="space-y-5 p-6">
-              <div className="flex rounded-xl bg-gray-100 p-1">
-                <button
-                  type="button"
-                  onClick={() => setDepositMode("percent")}
-                  className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold ${
-                    depositMode === "percent"
-                      ? "bg-white text-gray-900 shadow-sm"
-                      : "text-gray-600"
-                  }`}
-                >
-                  Percent
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setDepositMode("amount")}
-                  className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold ${
-                    depositMode === "amount"
-                      ? "bg-white text-gray-900 shadow-sm"
-                      : "text-gray-600"
-                  }`}
-                >
-                  Dollar Amount
-                </button>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
-                  Payment {depositMode === "percent" ? "Percentage" : "Amount"}
-                </label>
-
-                <div className="relative">
-                  {depositMode === "amount" && (
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
-                      $
-                    </span>
-                  )}
-
-                  <input
-                    type="number"
-                    min="0"
-                    step={depositMode === "percent" ? "1" : "0.01"}
-                    value={depositValue}
-                    onChange={(e) => setDepositValue(e.target.value)}
-                    className={`w-full rounded-xl border border-gray-300 p-3 text-gray-900 ${
-                      depositMode === "amount" ? "pl-7" : "pr-9"
-                    }`}
-                    placeholder={depositMode === "percent" ? "30" : "0.00"}
-                  />
-
-                  {depositMode === "percent" && (
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
-                      %
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                <div className="flex justify-between text-sm text-gray-600">
-                  <span>Balance due</span>
-                  <span>
-                    {formatCurrency(getInvoiceBalance(depositModalInvoice))}
-                  </span>
-                </div>
-
-                <div className="mt-3 flex justify-between text-base font-bold text-gray-900">
-                  <span>Payment request</span>
-                  <span>{formatCurrency(getDepositPreviewAmount())}</span>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={closeDepositModal}
-                  disabled={depositSending}
-                  className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-gray-800 hover:bg-gray-100 disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="button"
-                  onClick={sendDepositRequest}
-                  disabled={depositSending}
-                  className="rounded-xl bg-orange-600 px-4 py-2 font-semibold text-white hover:bg-orange-700 disabled:opacity-50"
-                >
-                  {depositSending ? "Sending..." : "Send Payment Request"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {paymentsModalInvoice && (
+  <PaymentsModal
+    invoice={paymentsModalInvoice}
+    payments={payments.filter(
+      (payment) => payment.invoice_id === paymentsModalInvoice.id
+    )}
+    userId={user.id}
+    onClose={() => setPaymentsModalInvoice(null)}
+    onRefresh={() => loadPageData(user.id)}
+  />
+)}
     </main>
   );
 }
