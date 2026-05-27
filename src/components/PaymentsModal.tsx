@@ -106,6 +106,23 @@ export default function PaymentsModal({
     return Math.round(raw * 100) / 100;
   }, [scheduleValue, scheduleMode, invoiceTotal]);
 
+  const scheduledTotal = useMemo(() => {
+  return scheduleItems.reduce(
+    (sum, item) => sum + Number(item.amount || 0),
+    0
+  );
+}, [scheduleItems]);
+
+const remainingToSchedule = Math.max(
+  invoiceTotal - scheduledTotal,
+  0
+);
+
+const scheduledPercent =
+  invoiceTotal > 0
+    ? Math.round((scheduledTotal / invoiceTotal) * 100)
+    : 0;
+
   async function loadScheduleItems() {
     const { data, error } = await supabase
       .from("payment_schedule_items")
@@ -221,9 +238,9 @@ export default function PaymentsModal({
 
 if (existingScheduledTotal + scheduleAmount > invoiceTotal) {
   setMessage(
-    `Scheduled payments cannot exceed the invoice total of ${formatCurrency(
-      invoiceTotal
-    )}.`
+    `Only ${formatCurrency(
+      Math.max(invoiceTotal - existingScheduledTotal, 0)
+    )} remains available to schedule.`
   );
   return;
 }
@@ -527,6 +544,24 @@ if (existingScheduledTotal + scheduleAmount > invoiceTotal) {
           {activeTab === "schedule" && (
             <div className="space-y-5">
               <h3 className="text-lg font-bold text-gray-900">Payment Schedule</h3>
+
+              <div className="grid gap-3 md:grid-cols-3">
+  <SummaryCard
+    label="Scheduled"
+    value={`${formatCurrency(scheduledTotal)} (${scheduledPercent}%)`}
+  />
+
+  <SummaryCard
+    label="Remaining"
+    value={formatCurrency(remainingToSchedule)}
+    danger={remainingToSchedule > 0}
+  />
+
+  <SummaryCard
+    label="Invoice Total"
+    value={formatCurrency(invoiceTotal)}
+  />
+</div>
 
               <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
                 <div className="grid gap-3 md:grid-cols-2">
