@@ -153,6 +153,14 @@ export default function InvoicesPage() {
   const [paymentMethod, setPaymentMethod] = useState("");
   const [paymentNotes, setPaymentNotes] = useState("");
 
+  const [depositModalInvoice, setDepositModalInvoice] =
+    useState<Invoice | null>(null);
+  const [depositMode, setDepositMode] = useState<"percent" | "amount">(
+    "percent"
+  );
+  const [depositValue, setDepositValue] = useState("30");
+  const [depositSending, setDepositSending] = useState(false);
+
   const currentPrintId = editingId || initialInvoiceId || null;
 
   async function fetchCustomers(currentUserId: string) {
@@ -504,99 +512,131 @@ export default function InvoicesPage() {
     await setInvoiceStatus(invoice.id, "paid");
   }
 
-async function handleCreateStripePaymentLink(
-  invoice: Invoice,
-  paymentType: "deposit" | "balance" | "custom"
-) {
-  if (!user) {
-    setMessage("You must be signed in.");
-    return;
+  function openDepositModal(invoice: Invoice) {
+    setDepositModalInvoice(invoice);
+    setDepositMode("percent");
+    setDepositValue("30");
+    setMessage("");
   }
 
-  const balance = getInvoiceBalance(invoice);
-
-  if (balance <= 0) {
-    setMessage("This invoice is already paid.");
-    return;
+  function closeDepositModal() {
+    if (depositSending) return;
+    setDepositModalInvoice(null);
+    setDepositMode("percent");
+    setDepositValue("30");
   }
 
-  let requestedAmount = balance;
+  function getDepositPreviewAmount() {
+    if (!depositModalInvoice) return 0;
 
-  if (paymentType === "deposit") {
-    const method = window.prompt(
-      "Enter P for percentage or D for dollar amount.",
-      "P"
-    );
+    const balance = getInvoiceBalance(depositModalInvoice);
+    const rawValue = Number(depositValue);
 
-    if (!method) return;
+    if (!rawValue || rawValue <= 0) return 0;
 
-    if (method.toLowerCase() === "p") {
-      const rawPercent = window.prompt("Enter deposit percentage.", "30");
+    if (depositMode === "percent") {
+      return Math.round(balance * (rawValue / 100) * 100) / 100;
+    }
 
-      if (!rawPercent) return;
+    return Math.round(rawValue * 100) / 100;
+  }
 
-      const percent = Number(rawPercent);
-
-      if (!percent || percent <= 0 || percent > 100) {
-        setMessage("Deposit percentage must be between 1 and 100.");
-        return;
-      }
-
-      requestedAmount = Math.round(balance * (percent / 100) * 100) / 100;
-    } else if (method.toLowerCase() === "d") {
-      const rawAmount = window.prompt(
-        `Enter deposit amount. Balance due is ${formatCurrency(balance)}.`,
-        String(Math.round(balance * 0.3 * 100) / 100)
-      );
-
-      if (!rawAmount) return;
-
-      requestedAmount = Number(rawAmount);
-    } else {
-      setMessage("Please enter P for percentage or D for dollar amount.");
+  async function sendDepositRequest() {
+    if (!user) {
+      setMessage("You must be signed in.");
       return;
     }
+
+    if (!depositModalInvoice) return;
+
+    const balance = getInvoiceBalance(depositModalInvoice);
+    const requestedAmount = getDepositPreviewAmount();
+
+    if (!requestedAmount || requestedAmount <= 0) {
+      setMessage("Deposit amount must be greater than 0.");
+      return;
+    }
+
+    if (requestedAmount > balance) {
+      setMessage("Deposit amount cannot exceed the balance due.");
+      return;
+    }
+
+    setDepositSending(true);
+    setMessage("Sending deposit request email...");
+
+    const response = await fetch("/api/send-invoice-deposit-email", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        invoiceId: depositModalInvoice.id,
+        amount: requestedAmount,
+        paymentType: "deposit",
+      }),
+    });
+
+    const data = (await response.json()) as {
+      success?: boolean;
+      paymentUrl?: string;
+      error?: string;
+    };
+
+    setDepositSending(false);
+
+    if (!response.ok || !data.success) {
+      setMessage(data.error || "Unable to send deposit request.");
+      return;
+    }
+
+    setMessage(`Deposit request sent for ${formatCurrency(requestedAmount)}.`);
+    closeDepositModal();
   }
 
-  if (!requestedAmount || requestedAmount <= 0) {
-    setMessage("Payment amount must be greater than 0.");
-    return;
+  async function handleCreateStripePaymentLink(
+    invoice: Invoice,
+    paymentType: "deposit" | "balance" | "custom"
+  ) {
+    if (!user) {
+      setMessage("You must be signed in.");
+      return;
+    }
+
+    const balance = getInvoiceBalance(invoice);
+
+    if (balance <= 0) {
+      setMessage("This invoice is already paid.");
+      return;
+    }
+
+    setMessage("Creating Stripe payment link...");
+
+    const response = await fetch("/api/stripe/create-invoice-payment", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        invoiceId: invoice.id,
+        amount: balance,
+        paymentType,
+      }),
+    });
+
+    const data = (await response.json()) as {
+      url?: string;
+      error?: string;
+    };
+
+    if (!response.ok || !data.url) {
+      setMessage(data.error || "Unable to create payment link.");
+      return;
+    }
+
+    window.open(data.url, "_blank", "noopener,noreferrer");
+    setMessage("Stripe payment page opened.");
   }
-
-  if (requestedAmount > balance) {
-    setMessage("Payment amount cannot exceed the balance due.");
-    return;
-  }
-
-  setMessage("Sending deposit request email...");
-
-  const response = await fetch("/api/send-invoice-deposit-email", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      invoiceId: invoice.id,
-      amount: requestedAmount,
-      paymentType,
-    }),
-  });
-
-  const data = (await response.json()) as {
-    success?: boolean;
-    paymentUrl?: string;
-    error?: string;
-  };
-
-  if (!response.ok || !data.success) {
-    setMessage(data.error || "Unable to send deposit request.");
-    return;
-  }
-
-  setMessage(
-    `Deposit request sent for ${formatCurrency(requestedAmount)}.`
-  );
-}
 
   async function updateInvoicePaymentStatus(invoiceId: string) {
     const invoice = invoices.find((item) => item.id === invoiceId);
@@ -1123,7 +1163,7 @@ async function handleCreateStripePaymentLink(
                   <button
                     type="button"
                     onClick={() => setInvoiceStatus(editingId, "sent")}
-                    className="rounded-xl bg-yellow-600 px-4 py-2 text-white"
+                    className="rounded-xl bg-slate-700 px-4 py-2 text-white hover:bg-slate-600"
                   >
                     Mark Sent
                   </button>
@@ -1136,7 +1176,7 @@ async function handleCreateStripePaymentLink(
                       );
                       if (invoice) markInvoicePaid(invoice);
                     }}
-                    className="rounded-xl bg-green-600 px-4 py-2 text-white"
+                    className="rounded-xl bg-slate-900 px-4 py-2 text-white hover:bg-slate-800"
                   >
                     Mark Paid
                   </button>
@@ -1215,7 +1255,7 @@ async function handleCreateStripePaymentLink(
                   </Field>
                 </div>
 
-                <button className="rounded-xl bg-green-600 px-4 py-2 text-white">
+                <button className="rounded-xl bg-slate-900 px-4 py-2 text-white hover:bg-slate-800">
                   Add Payment
                 </button>
               </form>
@@ -1288,7 +1328,9 @@ async function handleCreateStripePaymentLink(
                 const paidTotal = getInvoicePaidTotal(invoice.id);
                 const balance = getInvoiceBalance(invoice);
                 const displayStatus =
-                  isPastDue(invoice) && balance > 0 ? "overdue" : invoice.status;
+                  isPastDue(invoice) && balance > 0
+                    ? "overdue"
+                    : invoice.status;
 
                 return (
                   <div
@@ -1403,9 +1445,7 @@ async function handleCreateStripePaymentLink(
                         <>
                           <button
                             type="button"
-                            onClick={() =>
-                              handleCreateStripePaymentLink(invoice, "deposit")
-                            }
+                            onClick={() => openDepositModal(invoice)}
                             className="rounded-xl bg-orange-600 px-3 py-1 text-white hover:bg-orange-700"
                           >
                             Request Deposit
@@ -1438,6 +1478,116 @@ async function handleCreateStripePaymentLink(
           )}
         </section>
       </div>
+
+      {depositModalInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
+            <div className="border-b border-gray-200 p-6">
+              <h2 className="text-2xl font-bold text-gray-900">
+                Request Deposit
+              </h2>
+              <p className="mt-2 text-sm text-gray-600">
+                Get some peace of mind and request a deposit before the work
+                starts.
+              </p>
+            </div>
+
+            <div className="space-y-5 p-6">
+              <div className="flex rounded-xl bg-gray-100 p-1">
+                <button
+                  type="button"
+                  onClick={() => setDepositMode("percent")}
+                  className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold ${
+                    depositMode === "percent"
+                      ? "bg-white text-gray-900 shadow-sm"
+                      : "text-gray-600"
+                  }`}
+                >
+                  Percent
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDepositMode("amount")}
+                  className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold ${
+                    depositMode === "amount"
+                      ? "bg-white text-gray-900 shadow-sm"
+                      : "text-gray-600"
+                  }`}
+                >
+                  Dollar Amount
+                </button>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-900">
+                  Deposit {depositMode === "percent" ? "Percentage" : "Amount"}
+                </label>
+
+                <div className="relative">
+                  {depositMode === "amount" && (
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                      $
+                    </span>
+                  )}
+
+                  <input
+                    type="number"
+                    min="0"
+                    step={depositMode === "percent" ? "1" : "0.01"}
+                    value={depositValue}
+                    onChange={(e) => setDepositValue(e.target.value)}
+                    className={`w-full rounded-xl border border-gray-300 p-3 text-gray-900 ${
+                      depositMode === "amount" ? "pl-7" : "pr-9"
+                    }`}
+                    placeholder={depositMode === "percent" ? "30" : "0.00"}
+                  />
+
+                  {depositMode === "percent" && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
+                      %
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <div className="flex justify-between text-sm text-gray-600">
+                  <span>Balance due</span>
+                  <span>
+                    {formatCurrency(getInvoiceBalance(depositModalInvoice))}
+                  </span>
+                </div>
+
+                <div className="mt-3 flex justify-between text-base font-bold text-gray-900">
+                  <span>Deposit request</span>
+                  <span>{formatCurrency(getDepositPreviewAmount())}</span>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={closeDepositModal}
+                  disabled={depositSending}
+                  className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-gray-800 hover:bg-gray-100 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={sendDepositRequest}
+                  disabled={depositSending}
+                  className="rounded-xl bg-orange-600 px-4 py-2 font-semibold text-white hover:bg-orange-700 disabled:opacity-50"
+                >
+                  {depositSending ? "Sending..." : "Send Deposit Request"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
