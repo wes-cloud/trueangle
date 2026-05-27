@@ -1234,7 +1234,7 @@ export default function InvoicesPage() {
                         <button
                           type="button"
                           onClick={() => handleDeletePayment(payment.id)}
-                          className="rounded-xl bg-red-600 px-3 py-1 text-white"
+                          className="rounded-xl border border-red-300 bg-white px-3 py-1 text-red-700 hover:bg-red-50"
                         >
                           Delete
                         </button>
@@ -1343,7 +1343,7 @@ export default function InvoicesPage() {
                       <button
                         type="button"
                         onClick={() => handleEdit(invoice)}
-                        className="rounded-xl bg-blue-600 px-3 py-1 text-white"
+                        className="rounded-xl border border-gray-300 bg-white px-3 py-1 text-gray-800 hover:bg-gray-100"
                       >
                         Edit
                       </button>
@@ -1352,7 +1352,7 @@ export default function InvoicesPage() {
                         href={`/invoices/${invoice.id}/print`}
                         target="_blank"
                         rel="noreferrer"
-                        className="rounded-xl bg-black px-3 py-1 text-white"
+                        className="rounded-xl border border-gray-300 bg-white px-3 py-1 text-gray-800 hover:bg-gray-100"
                       >
                         Print
                       </a>
@@ -1361,7 +1361,7 @@ export default function InvoicesPage() {
                         <button
                           type="button"
                           onClick={() => setInvoiceStatus(invoice.id, "sent")}
-                          className="rounded-xl bg-yellow-600 px-3 py-1 text-white"
+                          className="rounded-xl bg-slate-700 px-3 py-1 text-white hover:bg-slate-600"
                         >
                           Mark Sent
                         </button>
@@ -1371,7 +1371,7 @@ export default function InvoicesPage() {
                         <button
                           type="button"
                           onClick={() => markInvoicePaid(invoice)}
-                          className="rounded-xl bg-green-600 px-3 py-1 text-white"
+                          className="rounded-xl bg-slate-900 px-3 py-1 text-white hover:bg-slate-800"
                         >
                           Mark Paid
                         </button>
@@ -1384,7 +1384,7 @@ export default function InvoicesPage() {
                             onClick={() =>
                               handleCreateStripePaymentLink(invoice, "deposit")
                             }
-                            className="rounded-xl bg-orange-600 px-3 py-1 text-white"
+                            className="rounded-xl bg-orange-600 px-3 py-1 text-white hover:bg-orange-700"
                           >
                             Request Deposit
                           </button>
@@ -1394,7 +1394,7 @@ export default function InvoicesPage() {
                             onClick={() =>
                               handleCreateStripePaymentLink(invoice, "balance")
                             }
-                            className="rounded-xl bg-indigo-600 px-3 py-1 text-white"
+                            className="rounded-xl bg-orange-600 px-3 py-1 text-white hover:bg-orange-700"
                           >
                             Pay Balance
                           </button>

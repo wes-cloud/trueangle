@@ -314,12 +314,7 @@ export default function EstimatePrintPage() {
             border: "1px solid #e5e7eb",
           }}
         >
-          <div
-            className="p-10"
-            style={{
-              borderTop: `8px solid ${BRAND_ORANGE}`,
-            }}
-          >
+<div className="p-10">
             <div className="mb-10 flex items-start justify-between gap-8">
               <div className="max-w-[60%]">
                 {companySettings?.logo_url ? (

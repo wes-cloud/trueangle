@@ -259,14 +259,14 @@ export default function EstimatesPage() {
                   <div className="mt-4 flex flex-wrap gap-3">
                     <Link
                       href={`/estimates/${estimate.id}`}
-                      className="rounded bg-black px-3 py-1 text-white"
+                      className="rounded border border-gray-300 bg-white px-3 py-1 text-gray-800 hover:bg-gray-100"
                     >
                       View
                     </Link>
 
                     <Link
                       href={`/estimates/new?id=${estimate.id}`}
-                      className="rounded bg-blue-600 px-3 py-1 text-white"
+                      className="rounded border border-gray-300 bg-white px-3 py-1 text-gray-800 hover:bg-gray-100"
                     >
                       Edit
                     </Link>
@@ -274,7 +274,7 @@ export default function EstimatesPage() {
                     {estimate.converted_invoice_id && (
                       <Link
                         href={`/invoices?invoice_id=${estimate.converted_invoice_id}`}
-                        className="rounded bg-green-600 px-3 py-1 text-white"
+                        className="rounded bg-slate-900 px-3 py-1 text-white hover:bg-slate-800"
                       >
                         View Invoice
                       </Link>
@@ -284,7 +284,7 @@ export default function EstimatesPage() {
                       type="button"
                       onClick={() => handleDeleteEstimate(estimate)}
                       disabled={deletingId === estimate.id}
-                      className="rounded bg-red-600 px-3 py-1 text-white disabled:opacity-50"
+                      className="rounded border border-red-300 bg-white px-3 py-1 text-red-700 hover:bg-red-50 disabled:opacity-50"
                     >
                       {deletingId === estimate.id ? "Deleting..." : "Delete"}
                     </button>
