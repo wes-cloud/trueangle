@@ -156,14 +156,6 @@ export default function InvoicesPage() {
   const [paymentMethod, setPaymentMethod] = useState("");
   const [paymentNotes, setPaymentNotes] = useState("");
 
-  const [depositModalInvoice, setDepositModalInvoice] =
-    useState<Invoice | null>(null);
-  const [depositMode, setDepositMode] = useState<"percent" | "amount">(
-    "percent"
-  );
-  const [depositValue, setDepositValue] = useState("30");
-  const [depositSending, setDepositSending] = useState(false);
-
   const currentPrintId = editingId || initialInvoiceId || null;
 
   async function fetchCustomers(currentUserId: string) {
@@ -513,132 +505,7 @@ export default function InvoicesPage() {
     }
 
     await setInvoiceStatus(invoice.id, "paid");
-  }
-
-  function openDepositModal(invoice: Invoice) {
-    setDepositModalInvoice(invoice);
-    setDepositMode("percent");
-    setDepositValue("30");
-    setMessage("");
-  }
-
-  function closeDepositModal() {
-    if (depositSending) return;
-    setDepositModalInvoice(null);
-    setDepositMode("percent");
-    setDepositValue("30");
-  }
-
-  function getDepositPreviewAmount() {
-    if (!depositModalInvoice) return 0;
-
-    const balance = getInvoiceBalance(depositModalInvoice);
-    const rawValue = Number(depositValue);
-
-    if (!rawValue || rawValue <= 0) return 0;
-
-    if (depositMode === "percent") {
-      return Math.round(balance * (rawValue / 100) * 100) / 100;
-    }
-
-    return Math.round(rawValue * 100) / 100;
-  }
-
-  async function sendDepositRequest() {
-    if (!user) {
-      setMessage("You must be signed in.");
-      return;
-    }
-
-    if (!depositModalInvoice) return;
-
-    const balance = getInvoiceBalance(depositModalInvoice);
-    const requestedAmount = getDepositPreviewAmount();
-
-    if (!requestedAmount || requestedAmount <= 0) {
-      setMessage("Deposit amount must be greater than 0.");
-      return;
-    }
-
-    if (requestedAmount > balance) {
-      setMessage("Deposit amount cannot exceed the balance due.");
-      return;
-    }
-
-    setDepositSending(true);
-    setMessage("Sending deposit request email...");
-
-    const response = await fetch("/api/send-invoice-deposit-email", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        invoiceId: depositModalInvoice.id,
-        amount: requestedAmount,
-        paymentType: "deposit",
-      }),
-    });
-
-    const data = (await response.json()) as {
-      success?: boolean;
-      paymentUrl?: string;
-      error?: string;
-    };
-
-    setDepositSending(false);
-
-    if (!response.ok || !data.success) {
-      setMessage(data.error || "Unable to send deposit request.");
-      return;
-    }
-
-    setMessage(`Deposit request sent for ${formatCurrency(requestedAmount)}.`);
-    closeDepositModal();
-  }
-
-  async function handleCreateStripePaymentLink(
-    invoice: Invoice,
-    paymentType: "deposit" | "balance" | "custom"
-  ) {
-    if (!user) {
-      setMessage("You must be signed in.");
-      return;
-    }
-
-    const balance = getInvoiceBalance(invoice);
-
-    if (balance <= 0) {
-      setMessage("This invoice is already paid.");
-      return;
-    }
-
-    setMessage("Creating Stripe payment link...");
-
-    const response = await fetch("/api/stripe/create-invoice-payment", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        invoiceId: invoice.id,
-        amount: balance,
-        paymentType,
-      }),
-    });
-
-    const data = (await response.json()) as {
-      url?: string;
-      error?: string;
-    };
-
-    if (!response.ok || !data.url) {
-      setMessage(data.error || "Unable to create payment link.");
-      return;
-    }
-
-    window.open(data.url, "_blank", "noopener,noreferrer");
-    setMessage("Stripe payment page opened.");
+  
   }
 
   async function updateInvoicePaymentStatus(invoiceId: string) {

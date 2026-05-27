@@ -118,11 +118,18 @@ export async function POST(req: NextRequest) {
 
     const formattedAmount = formatCurrency(paymentAmount);
     const formattedTotal = formatCurrency(Number(invoice.amount || 0));
+const isDeposit = paymentType === "deposit";
+const requestLabel = isDeposit ? "Deposit" : "Payment";
+const heading = isDeposit ? "Deposit requested" : "Payment requested";
+const bodyText = isDeposit
+  ? "A deposit payment has been requested for your invoice."
+  : "A payment has been requested for your invoice.";
+const buttonText = isDeposit ? "Pay Deposit" : "Pay Invoice";
 
     await resend.emails.send({
       from: "TrueAngle <estimates@trueangle.app>",
       to: [customerEmail],
-      subject: `Deposit request for Invoice ${invoice.invoice_number || ""}`,
+      subject: `${requestLabel} request for Invoice ${invoice.invoice_number || ""}`,
       html: `
         <div style="font-family: Arial, sans-serif; background: #f1f5f9; padding: 32px;">
           <div style="max-width: 640px; margin: 0 auto; background: #ffffff; border-radius: 18px; overflow: hidden;">
@@ -131,7 +138,7 @@ export async function POST(req: NextRequest) {
                 TRUEANGLE PAYMENT REQUEST
               </p>
               <h1 style="margin: 8px 0 0; font-size: 28px;">
-                Deposit requested
+                ${heading}
               </h1>
             </div>
 
@@ -139,7 +146,7 @@ export async function POST(req: NextRequest) {
               <p>Hi ${customer.full_name || "there"},</p>
 
               <p>
-                A deposit payment has been requested for your invoice.
+                ${bodyText}
               </p>
 
               <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 18px; margin: 24px 0;">
@@ -147,11 +154,11 @@ export async function POST(req: NextRequest) {
                   invoice.invoice_number || "—"
                 }</p>
                 <p style="margin: 10px 0 0;"><strong>Invoice Total:</strong> ${formattedTotal}</p>
-                <p style="margin: 10px 0 0;"><strong>Deposit Requested:</strong> ${formattedAmount}</p>
+                <p style="margin: 10px 0 0;"><strong>${requestLabel} Requested:</strong> ${formattedAmount}</p>
               </div>
 
               <a href="${session.url}" style="display: inline-block; background: #ea580c; color: white; text-decoration: none; padding: 14px 22px; border-radius: 12px; font-weight: bold;">
-                Pay Deposit
+                ${buttonText}
               </a>
 
               <p style="margin-top: 28px; color: #64748b; font-size: 13px;">
