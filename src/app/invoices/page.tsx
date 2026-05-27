@@ -1482,11 +1482,10 @@ export default function InvoicesPage() {
           <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
             <div className="border-b border-gray-200 p-6">
               <h2 className="text-2xl font-bold text-gray-900">
-                Request Deposit
+                Request Payment
               </h2>
               <p className="mt-2 text-sm text-gray-600">
-                Get some peace of mind and request a deposit before the work
-                starts.
+                Send a payment request to your customer by email.
               </p>
             </div>
 
@@ -1519,7 +1518,7 @@ export default function InvoicesPage() {
 
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-900">
-                  Deposit {depositMode === "percent" ? "Percentage" : "Amount"}
+                  Payment {depositMode === "percent" ? "Percentage" : "Amount"}
                 </label>
 
                 <div className="relative">
@@ -1558,7 +1557,7 @@ export default function InvoicesPage() {
                 </div>
 
                 <div className="mt-3 flex justify-between text-base font-bold text-gray-900">
-                  <span>Deposit request</span>
+                  <span>Payment request</span>
                   <span>{formatCurrency(getDepositPreviewAmount())}</span>
                 </div>
               </div>
@@ -1579,7 +1578,7 @@ export default function InvoicesPage() {
                   disabled={depositSending}
                   className="rounded-xl bg-orange-600 px-4 py-2 font-semibold text-white hover:bg-orange-700 disabled:opacity-50"
                 >
-                  {depositSending ? "Sending..." : "Send Deposit Request"}
+                  {depositSending ? "Sending..." : "Send Payment Request"}
                 </button>
               </div>
             </div>
