@@ -214,6 +214,20 @@ export default function PaymentsModal({
       return;
     }
 
+    const existingScheduledTotal = scheduleItems.reduce(
+  (sum, item) => sum + Number(item.amount || 0),
+  0
+);
+
+if (existingScheduledTotal + scheduleAmount > invoiceTotal) {
+  setMessage(
+    `Scheduled payments cannot exceed the invoice total of ${formatCurrency(
+      invoiceTotal
+    )}.`
+  );
+  return;
+}
+
     if (scheduleAmount <= 0) {
       setMessage("Schedule amount must be greater than 0.");
       return;
