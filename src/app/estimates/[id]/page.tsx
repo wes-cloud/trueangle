@@ -101,15 +101,15 @@ function formatStatus(status: string | null) {
 function getStatusClass(status: string | null) {
   switch (status) {
     case "sent":
-      return "bg-yellow-100 text-yellow-900 ring-yellow-200";
+      return "bg-amber-50 text-amber-800 ring-1 ring-amber-200";
     case "approved":
-      return "bg-blue-100 text-blue-900 ring-blue-200";
+      return "bg-blue-50 text-blue-800 ring-1 ring-blue-200";
     case "converted":
-      return "bg-green-100 text-green-900 ring-green-200";
+      return "bg-green-50 text-green-800 ring-1 ring-green-200";
     case "declined":
-      return "bg-red-100 text-red-900 ring-red-200";
+      return "bg-red-50 text-red-800 ring-1 ring-red-200";
     default:
-      return "bg-gray-100 text-gray-800 ring-gray-200";
+      return "bg-slate-100 text-slate-700 ring-1 ring-slate-200";
   }
 }
 
@@ -392,58 +392,58 @@ export default function EstimateDetailPage() {
   }
 
   async function handleSendEstimateEmail() {
-  if (!estimate || !approvalLink) return;
+    if (!estimate || !approvalLink) return;
 
-  if (!estimate.customer_email) {
-    setMessage("Customer email is missing.");
-    return;
-  }
-
-  setSendingEmail(true);
-  setMessage("");
-
-  try {
-    const response = await fetch("/api/send-estimate-email", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        customerEmail: estimate.customer_email,
-        customerName: estimate.customer_name,
-        estimateNumber: estimate.estimate_number,
-        projectName: estimate.job_name,
-        approvalUrl: approvalLink,
-        total: Number(estimate.amount || 0),
-        companyName: "TrueAngle",
-      }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      setMessage(data.error || "Unable to send estimate email.");
-      setSendingEmail(false);
+    if (!estimate.customer_email) {
+      setMessage("Customer email is missing.");
       return;
     }
 
-    await supabase
-      .from("estimates")
-      .update({
-        status: "sent",
-        approval_required: true,
-      })
-      .eq("id", estimate.id);
+    setSendingEmail(true);
+    setMessage("");
 
-    setMessage("Estimate email sent successfully.");
-    await loadData();
-  } catch (error) {
-    console.error(error);
-    setMessage("Unable to send estimate email.");
+    try {
+      const response = await fetch("/api/send-estimate-email", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          customerEmail: estimate.customer_email,
+          customerName: estimate.customer_name,
+          estimateNumber: estimate.estimate_number,
+          projectName: estimate.job_name,
+          approvalUrl: approvalLink,
+          total: Number(estimate.amount || 0),
+          companyName: "TrueAngle",
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setMessage(data.error || "Unable to send estimate email.");
+        setSendingEmail(false);
+        return;
+      }
+
+      await supabase
+        .from("estimates")
+        .update({
+          status: "sent",
+          approval_required: true,
+        })
+        .eq("id", estimate.id);
+
+      setMessage("Estimate email sent successfully.");
+      await loadData();
+    } catch (error) {
+      console.error(error);
+      setMessage("Unable to send estimate email.");
+    }
+
+    setSendingEmail(false);
   }
-
-  setSendingEmail(false);
-}
 
   async function copyApprovalLink() {
     if (!approvalLink) return;
@@ -652,13 +652,13 @@ export default function EstimateDetailPage() {
   const projectProfit = estimateAmount - totalExpenses;
   const isConverted = Boolean(estimate?.converted_invoice_id);
 
-  if (loading) {
+    if (loading) {
     return (
-      <main className="min-h-screen bg-gray-100 p-6 text-gray-900">
+      <main className="min-h-screen bg-slate-100 p-8 text-slate-950">
         <AppNav onSignOut={handleSignOut} />
         <div className="mx-auto max-w-6xl">
-          <div className="rounded-2xl bg-white p-6 shadow">
-            <p className="text-gray-900">Loading estimate...</p>
+          <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+            <p className="font-medium text-slate-700">Loading estimate...</p>
           </div>
         </div>
       </main>
@@ -667,14 +667,17 @@ export default function EstimateDetailPage() {
 
   if (error || !estimate) {
     return (
-      <main className="min-h-screen bg-gray-100 p-6 text-gray-900">
+      <main className="min-h-screen bg-slate-100 p-8 text-slate-950">
         <AppNav onSignOut={handleSignOut} />
         <div className="mx-auto max-w-6xl">
-          <div className="space-y-4 rounded-2xl bg-white p-6 shadow">
-            <p className="text-red-600">
+          <div className="space-y-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+            <p className="font-semibold text-red-700">
               Error: {error || "Estimate not found."}
             </p>
-            <Link href="/estimates" className="text-blue-600 underline">
+            <Link
+              href="/estimates"
+              className="font-semibold text-slate-900 underline"
+            >
               Back to Estimates
             </Link>
           </div>
@@ -684,29 +687,29 @@ export default function EstimateDetailPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-100 p-6 text-gray-900">
+    <main className="min-h-screen bg-slate-100 p-8 text-slate-950">
       <AppNav onSignOut={handleSignOut} />
 
       <div className="mx-auto max-w-6xl space-y-6">
-        <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
-          <div className="flex flex-wrap items-start justify-between gap-4">
+        <section className="rounded-3xl bg-gradient-to-r from-white to-slate-50 p-8 shadow-sm ring-1 ring-slate-200">
+          <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+              <p className="text-sm font-bold uppercase tracking-wide text-slate-500">
                 Estimate
               </p>
 
-              <h1 className="mt-2 text-3xl font-bold text-gray-900">
+              <h1 className="mt-2 text-3xl font-black text-slate-950">
                 {estimate.job_name || estimate.customer_name || "Project"}
               </h1>
 
-              <div className="mt-3 space-y-1 text-sm text-gray-700">
+              <div className="mt-3 space-y-1 text-sm font-medium text-slate-700">
                 <p>Estimate #: {estimate.estimate_number || "—"}</p>
                 <p>Created: {formatDate(estimate.created_at)}</p>
               </div>
 
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 <span
-                  className={`rounded-full px-3 py-1 text-xs font-semibold ring-1 ${getStatusClass(
+                  className={`rounded-full px-3 py-1 text-xs font-bold ${getStatusClass(
                     estimate.status
                   )}`}
                 >
@@ -714,24 +717,24 @@ export default function EstimateDetailPage() {
                 </span>
 
                 {isConverted && (
-                  <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-800 ring-1 ring-green-100">
+                  <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-bold text-green-800 ring-1 ring-green-200">
                     Invoice Created
                   </span>
                 )}
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-2">
               <Link
                 href="/estimates"
-                className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-gray-900 shadow-sm"
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2 font-semibold text-slate-800 hover:bg-slate-100"
               >
                 Back
               </Link>
 
               <Link
                 href={`/expenses?estimate_id=${estimate.id}`}
-                className="rounded-xl bg-blue-600 px-4 py-2 text-white"
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2 font-semibold text-slate-800 hover:bg-slate-100"
               >
                 + Expense
               </Link>
@@ -739,7 +742,7 @@ export default function EstimateDetailPage() {
               {estimate.converted_invoice_id ? (
                 <Link
                   href={`/invoices?invoice_id=${estimate.converted_invoice_id}`}
-                  className="rounded-xl bg-green-600 px-4 py-2 text-white"
+                  className="rounded-xl bg-slate-950 px-4 py-2 font-semibold text-white hover:bg-slate-800"
                 >
                   View Invoice
                 </Link>
@@ -748,7 +751,7 @@ export default function EstimateDetailPage() {
                   type="button"
                   onClick={handleCreateInvoice}
                   disabled={statusLoading}
-                  className="rounded-xl bg-green-600 px-4 py-2 text-white disabled:opacity-50"
+                  className="rounded-xl bg-slate-950 px-4 py-2 font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
                 >
                   Convert to Invoice
                 </button>
@@ -758,7 +761,7 @@ export default function EstimateDetailPage() {
                 href={`/estimates/${estimate.id}/print`}
                 target="_blank"
                 rel="noreferrer"
-                className="rounded-xl bg-black px-4 py-2 text-white"
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2 font-semibold text-slate-800 hover:bg-slate-100"
               >
                 Print
               </a>
@@ -767,51 +770,38 @@ export default function EstimateDetailPage() {
         </section>
 
         {message && (
-          <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-200">
-            <p className="text-sm text-gray-900">{message}</p>
+          <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+            <p className="text-sm font-semibold text-slate-900">{message}</p>
           </section>
         )}
 
         <section className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-200">
-            <p className="text-sm text-gray-700">Estimate Total</p>
-            <p className="mt-2 text-2xl font-semibold text-gray-900">
-              {formatCurrency(estimateAmount)}
-            </p>
-          </div>
-
-          <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-200">
-            <p className="text-sm text-gray-700">Project Expenses</p>
-            <p className="mt-2 text-2xl font-semibold text-gray-900">
-              {formatCurrency(totalExpenses)}
-            </p>
-          </div>
-
-          <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-200">
-            <p className="text-sm text-gray-700">Projected Profit</p>
-            <p className="mt-2 text-2xl font-semibold text-gray-900">
-              {formatCurrency(projectProfit)}
-            </p>
-          </div>
+          <StatCard label="Estimate Total" value={formatCurrency(estimateAmount)} />
+          <StatCard label="Project Expenses" value={formatCurrency(totalExpenses)} />
+          <StatCard
+            label="Projected Profit"
+            value={formatCurrency(projectProfit)}
+            danger={projectProfit < 0}
+          />
         </section>
 
-        <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
+        <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
           <div className="mb-5">
-            <h2 className="text-2xl font-bold text-gray-900">
+            <h2 className="text-2xl font-black text-slate-950">
               Estimate Workflow
             </h2>
-            <p className="mt-1 text-sm text-gray-600">
+            <p className="mt-1 text-sm font-medium text-slate-700">
               Send the estimate to the client for review. When they approve it
               through the link, TrueAngle creates the invoice automatically.
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => updateStatus("draft")}
               disabled={statusLoading || isConverted}
-              className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-gray-900 shadow-sm disabled:opacity-50"
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2 font-semibold text-slate-800 hover:bg-slate-100 disabled:opacity-50"
             >
               Mark Draft
             </button>
@@ -820,7 +810,7 @@ export default function EstimateDetailPage() {
               type="button"
               onClick={() => updateStatus("sent")}
               disabled={statusLoading || isConverted}
-              className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-gray-900 shadow-sm disabled:opacity-50"
+              className="rounded-xl bg-slate-700 px-4 py-2 font-semibold text-white hover:bg-slate-600 disabled:opacity-50"
             >
               Mark Sent
             </button>
@@ -829,7 +819,7 @@ export default function EstimateDetailPage() {
               type="button"
               onClick={() => updateStatus("approved")}
               disabled={statusLoading || isConverted}
-              className="rounded-xl bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
+              className="rounded-xl bg-slate-950 px-4 py-2 font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
             >
               Approve Internally
             </button>
@@ -838,33 +828,33 @@ export default function EstimateDetailPage() {
               type="button"
               onClick={() => updateStatus("declined")}
               disabled={statusLoading || isConverted}
-              className="rounded-xl bg-red-600 px-4 py-2 text-white disabled:opacity-50"
+              className="rounded-xl border border-red-300 bg-white px-4 py-2 font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
             >
               Mark Declined
             </button>
           </div>
 
-          <p className="mt-4 text-xs text-gray-500">
+          <p className="mt-4 text-xs font-medium text-slate-500">
             “Approve Internally” only updates the estimate status. To create an
             invoice, use the client approval link or the “Convert to Invoice”
             button.
           </p>
         </section>
 
-        <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
+        <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
           <div className="flex flex-col gap-4">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">
+              <h2 className="text-2xl font-black text-slate-950">
                 Client Approval Link
               </h2>
-              <p className="mt-1 text-sm text-gray-700">
+              <p className="mt-1 text-sm font-medium text-slate-700">
                 Use this when you want the client to review the estimate and
                 approve moving forward. Approval automatically creates a draft
                 invoice.
               </p>
             </div>
 
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-900">
+            <label className="flex items-center gap-2 text-sm font-semibold text-slate-900">
               <input
                 type="checkbox"
                 checked={approvalRequired}
@@ -876,27 +866,27 @@ export default function EstimateDetailPage() {
             </label>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-900">
+              <label className="mb-1 block text-sm font-semibold text-slate-950">
                 Approval Terms
               </label>
               <textarea
                 value={agreementTerms}
                 onChange={(event) => setAgreementTerms(event.target.value)}
                 disabled={isConverted}
-                className="min-h-[180px] w-full rounded-lg border p-3 text-gray-900 disabled:bg-gray-100"
+                className="min-h-[180px] w-full rounded-xl border border-slate-300 p-3 text-slate-950 disabled:bg-slate-100"
               />
-              <p className="mt-2 text-xs text-gray-600">
+              <p className="mt-2 text-xs font-medium text-slate-600">
                 These terms set expectations for estimate approval. They are not
                 a replacement for a formal contract.
               </p>
             </div>
 
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={handleSaveApprovalSettings}
                 disabled={savingApproval || isConverted}
-                className="rounded-xl bg-black px-4 py-2 text-white disabled:opacity-50"
+                className="rounded-xl bg-slate-950 px-4 py-2 font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
               >
                 Save Approval Settings
               </button>
@@ -905,30 +895,30 @@ export default function EstimateDetailPage() {
                 type="button"
                 onClick={handleSendForApproval}
                 disabled={statusLoading || isConverted}
-                className="rounded-xl bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
+                className="rounded-xl bg-slate-700 px-4 py-2 font-semibold text-white hover:bg-slate-600 disabled:opacity-50"
               >
                 Send for Approval
               </button>
 
               <button
-  type="button"
-  onClick={handleSendEstimateEmail}
-  disabled={
-    sendingEmail ||
-    statusLoading ||
-    isConverted ||
-    !estimate.customer_email
-  }
-  className="rounded-xl bg-orange-600 px-4 py-2 text-white disabled:opacity-50"
->
-  {sendingEmail ? "Sending..." : "Email Estimate"}
-</button>
+                type="button"
+                onClick={handleSendEstimateEmail}
+                disabled={
+                  sendingEmail ||
+                  statusLoading ||
+                  isConverted ||
+                  !estimate.customer_email
+                }
+                className="rounded-xl bg-orange-600 px-4 py-2 font-semibold text-white hover:bg-orange-700 disabled:opacity-50"
+              >
+                {sendingEmail ? "Sending..." : "Email Estimate"}
+              </button>
 
               {approvalLink && !isConverted && (
                 <button
                   type="button"
                   onClick={copyApprovalLink}
-                  className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-gray-900 shadow-sm"
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 font-semibold text-slate-800 hover:bg-slate-100"
                 >
                   Copy Approval Link
                 </button>
@@ -936,11 +926,11 @@ export default function EstimateDetailPage() {
             </div>
 
             {approvalLink && !isConverted && (
-              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                <p className="text-sm font-semibold text-gray-900">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-bold text-slate-950">
                   Approval Link
                 </p>
-                <p className="mt-1 break-all text-sm text-blue-700">
+                <p className="mt-1 break-all text-sm font-medium text-blue-700">
                   {approvalLink}
                 </p>
               </div>
@@ -948,14 +938,14 @@ export default function EstimateDetailPage() {
 
             {estimate.approved_at && (
               <div className="rounded-xl border border-green-200 bg-green-50 p-4">
-                <p className="text-sm font-semibold text-green-900">
+                <p className="text-sm font-bold text-green-900">
                   Approved by {estimate.approved_by_name || "client"}
                 </p>
-                <p className="text-sm text-green-800">
+                <p className="text-sm font-medium text-green-800">
                   {formatDate(estimate.approved_at)}
                 </p>
                 {estimate.approved_by_email && (
-                  <p className="text-sm text-green-800">
+                  <p className="text-sm font-medium text-green-800">
                     {estimate.approved_by_email}
                   </p>
                 )}
@@ -965,8 +955,8 @@ export default function EstimateDetailPage() {
         </section>
 
         <section className="grid gap-6 md:grid-cols-2">
-          <div className="space-y-4 rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
-            <h2 className="text-xl font-semibold text-gray-900">
+          <div className="space-y-4 rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
+            <h2 className="text-xl font-black text-slate-950">
               Estimate Info
             </h2>
 
@@ -988,8 +978,8 @@ export default function EstimateDetailPage() {
             <InfoRow label="Exclusions" value={estimate.exclusions} />
           </div>
 
-          <div className="space-y-4 rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
-            <h2 className="text-xl font-semibold text-gray-900">
+          <div className="space-y-4 rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
+            <h2 className="text-xl font-black text-slate-950">
               Linked Customer
             </h2>
 
@@ -1002,7 +992,9 @@ export default function EstimateDetailPage() {
               </>
             ) : (
               <>
-                <p className="text-gray-800">No linked customer record found.</p>
+                <p className="font-medium text-slate-700">
+                  No linked customer record found.
+                </p>
                 <InfoRow
                   label="Estimate Email"
                   value={estimate.customer_email}
@@ -1020,12 +1012,12 @@ export default function EstimateDetailPage() {
           </div>
         </section>
 
-        <section className="space-y-5 rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
+        <section className="space-y-5 rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">
+            <h2 className="text-xl font-black text-slate-950">
               Project Photos
             </h2>
-            <p className="mt-1 text-sm text-gray-600">
+            <p className="mt-1 text-sm font-medium text-slate-700">
               Add jobsite, before/after, material, or reference photos to make
               your estimate more visual and professional.
             </p>
@@ -1037,14 +1029,14 @@ export default function EstimateDetailPage() {
               value={photoCaption}
               onChange={(event) => setPhotoCaption(event.target.value)}
               placeholder="Optional caption, like Before photo, Material option, or Finished example"
-              className="rounded-xl border border-gray-300 p-3 text-gray-900"
+              className="rounded-xl border border-slate-300 p-3 text-slate-950"
             />
 
             <label
-              className={`rounded-xl px-4 py-3 text-center text-white ${
+              className={`rounded-xl px-4 py-3 text-center font-semibold text-white ${
                 uploadingPhoto
-                  ? "cursor-not-allowed bg-gray-400"
-                  : "cursor-pointer bg-black hover:bg-gray-800"
+                  ? "cursor-not-allowed bg-slate-400"
+                  : "cursor-pointer bg-slate-950 hover:bg-slate-800"
               }`}
             >
               {uploadingPhoto ? "Uploading..." : "+ Add Photo"}
@@ -1059,13 +1051,13 @@ export default function EstimateDetailPage() {
           </div>
 
           {photos.length === 0 ? (
-            <p className="text-gray-800">No photos added yet.</p>
+            <p className="font-medium text-slate-700">No photos added yet.</p>
           ) : (
             <div className="grid gap-4 md:grid-cols-3">
               {photos.map((photo) => (
                 <div
                   key={photo.id}
-                  className="overflow-hidden rounded-2xl border border-gray-200 bg-white"
+                  className="overflow-hidden rounded-2xl border border-slate-200 bg-white"
                 >
                   <img
                     src={photo.image_url}
@@ -1074,14 +1066,14 @@ export default function EstimateDetailPage() {
                   />
 
                   <div className="space-y-3 p-4">
-                    <p className="text-sm text-gray-800">
+                    <p className="text-sm font-medium text-slate-800">
                       {photo.caption || "No caption"}
                     </p>
 
                     <button
                       type="button"
                       onClick={() => handleDeletePhoto(photo)}
-                      className="text-sm font-medium text-red-600 hover:underline"
+                      className="text-sm font-semibold text-red-700 hover:underline"
                     >
                       Delete photo
                     </button>
@@ -1092,22 +1084,22 @@ export default function EstimateDetailPage() {
           )}
         </section>
 
-        <section className="space-y-4 rounded-3xl bg-white p-8 shadow-sm ring-1 ring-gray-200">
+        <section className="space-y-4 rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold text-gray-900">
+            <h2 className="text-xl font-black text-slate-950">
               Project Expenses
             </h2>
 
             <Link
               href={`/expenses?estimate_id=${estimate.id}`}
-              className="rounded-xl bg-blue-600 px-4 py-2 text-white"
+              className="rounded-xl bg-slate-950 px-4 py-2 font-semibold text-white hover:bg-slate-800"
             >
               + Add Expense
             </Link>
           </div>
 
           {expenses.length === 0 ? (
-            <p className="text-gray-800">
+            <p className="font-medium text-slate-700">
               No expenses linked to this project yet.
             </p>
           ) : (
@@ -1115,36 +1107,36 @@ export default function EstimateDetailPage() {
               {expenses.map((expense) => (
                 <div
                   key={expense.id}
-                  className="flex items-center justify-between gap-4 rounded-xl border border-gray-200 p-4"
+                  className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 p-4"
                 >
                   <div>
-                    <p className="font-medium text-gray-900">
+                    <p className="font-bold text-slate-950">
                       {expense.description ||
                         expense.vendor ||
                         "Untitled expense"}
                     </p>
-                    <p className="text-sm text-gray-800">
+                    <p className="text-sm font-medium text-slate-700">
                       Category: {expense.category || "Uncategorized"}
                     </p>
-                    <p className="mt-1 text-sm font-medium text-gray-900">
+                    <p className="mt-1 text-sm font-semibold text-slate-900">
                       Project: {estimate.job_name || "Untitled Job"}
                     </p>
                     {customer && (
-                      <p className="text-sm text-gray-800">
+                      <p className="text-sm font-medium text-slate-700">
                         Customer: {customer.full_name}
                       </p>
                     )}
-                    <p className="text-sm text-gray-800">
+                    <p className="text-sm font-medium text-slate-700">
                       {formatDate(expense.expense_date || expense.created_at)}
                     </p>
                     {expense.notes && (
-                      <p className="mt-1 text-sm text-gray-800">
+                      <p className="mt-1 text-sm font-medium text-slate-700">
                         {expense.notes}
                       </p>
                     )}
                   </div>
 
-                  <div className="text-right font-semibold text-gray-900">
+                  <div className="text-right font-black text-slate-950">
                     {formatCurrency(Number(expense.amount || 0))}
                   </div>
                 </div>
@@ -1157,6 +1149,27 @@ export default function EstimateDetailPage() {
   );
 }
 
+function StatCard({
+  label,
+  value,
+  danger = false,
+}: {
+  label: string;
+  value: string;
+  danger?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-2xl p-5 shadow-sm ring-1 ${
+        danger ? "bg-red-50 ring-red-200" : "bg-white ring-slate-200"
+      }`}
+    >
+      <p className="text-sm font-medium text-slate-600">{label}</p>
+      <p className="mt-2 text-2xl font-black text-slate-950">{value}</p>
+    </div>
+  );
+}
+
 function InfoRow({
   label,
   value,
@@ -1166,8 +1179,10 @@ function InfoRow({
 }) {
   return (
     <div>
-      <p className="text-sm text-gray-700">{label}</p>
-      <p className="whitespace-pre-wrap text-gray-900">{value || "—"}</p>
+      <p className="text-sm font-medium text-slate-600">{label}</p>
+      <p className="whitespace-pre-wrap font-semibold text-slate-950">
+        {value || "—"}
+      </p>
     </div>
   );
 }
