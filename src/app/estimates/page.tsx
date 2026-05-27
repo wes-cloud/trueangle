@@ -47,15 +47,15 @@ function formatStatus(status: string | null) {
 function getStatusColor(status: string | null) {
   switch (status) {
     case "sent":
-      return "bg-yellow-100 text-yellow-800";
+      return "bg-amber-50 text-amber-800 ring-1 ring-amber-200";
     case "approved":
-      return "bg-blue-100 text-blue-800";
+      return "bg-blue-50 text-blue-800 ring-1 ring-blue-200";
     case "converted":
-      return "bg-green-100 text-green-800";
+      return "bg-green-50 text-green-800 ring-1 ring-green-200";
     case "declined":
-      return "bg-red-100 text-red-800";
+      return "bg-red-50 text-red-800 ring-1 ring-red-200";
     default:
-      return "bg-gray-100 text-gray-800";
+      return "bg-slate-100 text-slate-700 ring-1 ring-slate-200";
   }
 }
 
@@ -167,74 +167,74 @@ export default function EstimatesPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-gray-100 p-6 text-gray-900">
+      <main className="min-h-screen bg-slate-100 p-8 text-slate-950">
         <AppNav />
-        <div className="mx-auto max-w-5xl rounded-2xl bg-white p-6 shadow">
-          <p>Loading estimates...</p>
+        <div className="mx-auto max-w-5xl rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+          <p className="font-medium text-slate-700">Loading estimates...</p>
         </div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-gray-100 p-6 text-gray-900">
+    <main className="min-h-screen bg-slate-100 p-8 text-slate-950">
       <AppNav />
 
       <div className="mx-auto max-w-5xl space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Estimates</h1>
-            <p className="mt-1 text-sm text-gray-600">
-              Track estimates from draft to client approval to invoice.
-            </p>
-          </div>
+        <section className="rounded-3xl bg-gradient-to-r from-white to-slate-50 p-8 shadow-sm ring-1 ring-slate-200">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-wide text-slate-500">
+                Estimates
+              </p>
 
-          <Link
-            href="/estimates/new"
-            className="rounded bg-black px-4 py-2 text-white"
-          >
-            + New Estimate
-          </Link>
-        </div>
+              <h1 className="mt-2 text-3xl font-black text-slate-950">
+                Customer Estimates
+              </h1>
+
+              <p className="mt-1 text-sm font-medium text-slate-700">
+                Track estimates from draft to approval to invoice conversion.
+              </p>
+            </div>
+
+            <Link
+              href="/estimates/new"
+              className="rounded-xl bg-slate-950 px-5 py-3 font-bold text-white hover:bg-slate-800"
+            >
+              + New Estimate
+            </Link>
+          </div>
+        </section>
 
         {message && (
-          <div className="rounded-xl bg-white p-4 text-sm font-semibold text-gray-900 shadow">
-            {message}
-          </div>
+          <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+            <p className="text-sm font-semibold text-slate-900">{message}</p>
+          </section>
         )}
 
         {estimates.length === 0 ? (
-          <div className="rounded-xl bg-white p-6 shadow">
-            <p>No estimates yet.</p>
-          </div>
+          <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
+            <p className="font-medium text-slate-600">No estimates yet.</p>
+          </section>
         ) : (
-          <div className="space-y-4">
+          <section className="space-y-4">
             {estimates.map((estimate) => {
               const isConverted = !!estimate.converted_invoice_id;
 
               return (
-                <div key={estimate.id} className="rounded-xl bg-white p-5 shadow">
-                  <div className="flex flex-wrap items-center justify-between gap-4">
+                <div
+                  key={estimate.id}
+                  className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200"
+                >
+                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                     <div>
-                      <p className="text-lg font-bold text-gray-900">
-                        {estimate.customer_name || "No Customer"}
-                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-lg font-black text-slate-950">
+                          {estimate.customer_name || "No Customer"}
+                        </p>
 
-                      <p className="text-gray-700">
-                        {estimate.job_name || "No Job Name"}
-                      </p>
-
-                      <p className="text-sm text-gray-700">
-                        Estimate #: {estimate.estimate_number || "—"}
-                      </p>
-
-                      <p className="text-sm text-gray-700">
-                        Created: {formatDate(estimate.created_at)}
-                      </p>
-
-                      <div className="mt-2 flex items-center gap-2">
                         <span
-                          className={`rounded px-2 py-1 text-xs font-medium ${getStatusColor(
+                          className={`rounded-full px-3 py-1 text-xs font-bold ${getStatusColor(
                             estimate.status
                           )}`}
                         >
@@ -242,31 +242,43 @@ export default function EstimatesPage() {
                         </span>
 
                         {isConverted && (
-                          <span className="rounded bg-green-50 px-2 py-1 text-xs font-semibold text-green-800">
+                          <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-bold text-green-800 ring-1 ring-green-200">
                             Invoice Created
                           </span>
                         )}
                       </div>
+
+                      <p className="mt-1 font-medium text-slate-700">
+                        {estimate.job_name || "No Job Name"}
+                      </p>
+
+                      <p className="mt-2 text-sm font-medium text-slate-700">
+                        Estimate #: {estimate.estimate_number || "—"}
+                      </p>
+
+                      <p className="text-sm font-medium text-slate-700">
+                        Created: {formatDate(estimate.created_at)}
+                      </p>
                     </div>
 
-                    <div className="text-right">
-                      <p className="text-xl font-semibold text-gray-900">
+                    <div className="text-left md:text-right">
+                      <p className="text-2xl font-black text-slate-950">
                         {formatCurrency(Number(estimate.amount || 0))}
                       </p>
                     </div>
                   </div>
 
-                  <div className="mt-4 flex flex-wrap gap-3">
+                  <div className="mt-5 flex flex-wrap gap-2">
                     <Link
                       href={`/estimates/${estimate.id}`}
-                      className="rounded border border-gray-300 bg-white px-3 py-1 text-gray-800 hover:bg-gray-100"
+                      className="rounded-xl border border-slate-300 bg-white px-3 py-1 text-slate-800 hover:bg-slate-100"
                     >
                       View
                     </Link>
 
                     <Link
                       href={`/estimates/new?id=${estimate.id}`}
-                      className="rounded border border-gray-300 bg-white px-3 py-1 text-gray-800 hover:bg-gray-100"
+                      className="rounded-xl border border-slate-300 bg-white px-3 py-1 text-slate-800 hover:bg-slate-100"
                     >
                       Edit
                     </Link>
@@ -274,7 +286,7 @@ export default function EstimatesPage() {
                     {estimate.converted_invoice_id && (
                       <Link
                         href={`/invoices?invoice_id=${estimate.converted_invoice_id}`}
-                        className="rounded bg-slate-900 px-3 py-1 text-white hover:bg-slate-800"
+                        className="rounded-xl bg-slate-950 px-3 py-1 text-white hover:bg-slate-800"
                       >
                         View Invoice
                       </Link>
@@ -284,7 +296,7 @@ export default function EstimatesPage() {
                       type="button"
                       onClick={() => handleDeleteEstimate(estimate)}
                       disabled={deletingId === estimate.id}
-                      className="rounded border border-red-300 bg-white px-3 py-1 text-red-700 hover:bg-red-50 disabled:opacity-50"
+                      className="rounded-xl border border-red-300 bg-white px-3 py-1 text-red-700 hover:bg-red-50 disabled:opacity-50"
                     >
                       {deletingId === estimate.id ? "Deleting..." : "Delete"}
                     </button>
@@ -292,7 +304,7 @@ export default function EstimatesPage() {
                 </div>
               );
             })}
-          </div>
+          </section>
         )}
       </div>
     </main>
