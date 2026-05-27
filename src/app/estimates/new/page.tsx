@@ -880,9 +880,9 @@ export default function EstimatesNewPage() {
 
   if (authLoading) {
     return (
-      <main className="min-h-screen bg-gray-100 p-8">
-        <div className="mx-auto max-w-md rounded-2xl bg-white p-8 shadow">
-          <p className="text-gray-900">Loading...</p>
+      <main className="min-h-screen bg-slate-100 p-8">
+        <div className="mx-auto max-w-md rounded-2xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
+          <p className="text-slate-900">Loading...</p>
         </div>
       </main>
     );
@@ -890,12 +890,12 @@ export default function EstimatesNewPage() {
 
   if (!user) {
     return (
-      <main className="min-h-screen bg-gray-100 p-8">
-        <div className="mx-auto max-w-md rounded-2xl bg-white p-8 shadow">
-          <h1 className="mb-2 text-3xl font-bold text-gray-900">
+      <main className="min-h-screen bg-slate-100 p-8">
+        <div className="mx-auto max-w-md rounded-2xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
+          <h1 className="mb-2 text-3xl font-black text-slate-950">
             TrueAngle Login
           </h1>
-          <p className="mb-6 text-sm text-gray-600">
+          <p className="mb-6 text-sm font-medium text-slate-700">
             Sign in or create an account to manage estimates.
           </p>
 
@@ -905,7 +905,7 @@ export default function EstimatesNewPage() {
               placeholder="Email"
               value={authEmail}
               onChange={(e) => setAuthEmail(e.target.value)}
-              className="w-full rounded-lg border p-3 text-gray-900"
+              className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
             />
 
             <input
@@ -913,14 +913,14 @@ export default function EstimatesNewPage() {
               placeholder="Password"
               value={authPassword}
               onChange={(e) => setAuthPassword(e.target.value)}
-              className="w-full rounded-lg border p-3 text-gray-900"
+              className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
             />
 
             <div className="flex gap-3">
               <button
                 type="button"
                 onClick={handleSignIn}
-                className="rounded bg-black px-4 py-2 text-white"
+                className="rounded-xl bg-slate-950 px-4 py-2 font-semibold text-white hover:bg-slate-800"
               >
                 Sign In
               </button>
@@ -928,14 +928,16 @@ export default function EstimatesNewPage() {
               <button
                 type="button"
                 onClick={handleSignUp}
-                className="rounded bg-blue-600 px-4 py-2 text-white"
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2 font-semibold text-slate-800 hover:bg-slate-100"
               >
                 Sign Up
               </button>
             </div>
 
             {authMessage && (
-              <p className="text-sm text-gray-900">{authMessage}</p>
+              <p className="text-sm font-medium text-slate-900">
+                {authMessage}
+              </p>
             )}
           </div>
         </div>
@@ -944,29 +946,31 @@ export default function EstimatesNewPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-100 p-8">
+    <main className="min-h-screen bg-slate-100 p-8 text-slate-950">
       <AppNav onSignOut={handleSignOut} />
 
       <div className="mx-auto max-w-5xl space-y-8">
-        <div className="rounded-2xl bg-white p-8 shadow">
-          <h1 className="text-3xl font-bold text-gray-900">
-            {editingId ? "Edit Estimate" : "Create Estimate"}
-          </h1>
+        <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
+          <div>
+            <p className="text-sm font-bold uppercase tracking-wide text-slate-500">
+              Estimate Builder
+            </p>
 
-          <p className="mt-1 text-sm text-gray-600">
-            Signed in as {user.email || "User"}
-          </p>
+            <h1 className="mt-2 text-3xl font-black text-slate-950">
+              {editingId ? "Edit Estimate" : "Create Estimate"}
+            </h1>
+
+            <p className="mt-1 text-sm font-medium text-slate-700">
+              Signed in as {user.email || "User"}
+            </p>
+          </div>
 
           <form onSubmit={handleSaveEstimate} className="mt-6 space-y-6">
-            <div className="space-y-3">
-              <label className="block text-sm font-medium text-gray-900">
-                Customer
-              </label>
-
+            <FormField label="Customer">
               <select
                 value={selectedCustomerId}
                 onChange={(e) => handleSelectCustomer(e.target.value)}
-                className="w-full rounded-lg border p-3 text-gray-900"
+                className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
               >
                 <option value="">+ New Customer</option>
                 {customers.map((customerOption) => (
@@ -977,11 +981,11 @@ export default function EstimatesNewPage() {
               </select>
 
               {selectedCustomerId && (
-                <p className="text-sm text-green-700">
+                <p className="mt-2 text-sm font-medium text-green-700">
                   Existing customer selected. Contact info auto-filled below.
                 </p>
               )}
-            </div>
+            </FormField>
 
             <div className="grid gap-4 md:grid-cols-2">
               <input
@@ -989,7 +993,7 @@ export default function EstimatesNewPage() {
                 placeholder="Customer Name"
                 value={customer}
                 onChange={(e) => setCustomer(e.target.value)}
-                className="w-full rounded-lg border p-3 text-gray-900"
+                className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
                 required
               />
 
@@ -998,7 +1002,7 @@ export default function EstimatesNewPage() {
                 placeholder="Estimate Number"
                 value={estimateNumber}
                 onChange={(e) => setEstimateNumber(e.target.value)}
-                className="w-full rounded-lg border p-3 text-gray-900"
+                className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
               />
             </div>
 
@@ -1007,7 +1011,7 @@ export default function EstimatesNewPage() {
               placeholder="Customer Address"
               value={customerAddress}
               onChange={(e) => setCustomerAddress(e.target.value)}
-              className="w-full rounded-lg border p-3 text-gray-900"
+              className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
             />
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -1016,7 +1020,7 @@ export default function EstimatesNewPage() {
                 placeholder="Customer Email"
                 value={customerEmail}
                 onChange={(e) => setCustomerEmail(e.target.value)}
-                className="w-full rounded-lg border p-3 text-gray-900"
+                className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
               />
 
               <input
@@ -1024,7 +1028,7 @@ export default function EstimatesNewPage() {
                 placeholder="Customer Phone"
                 value={customerPhone}
                 onChange={(e) => setCustomerPhone(e.target.value)}
-                className="w-full rounded-lg border p-3 text-gray-900"
+                className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
               />
             </div>
 
@@ -1033,7 +1037,7 @@ export default function EstimatesNewPage() {
               placeholder="Job Name"
               value={job}
               onChange={(e) => setJob(e.target.value)}
-              className="w-full rounded-lg border p-3 text-gray-900"
+              className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
               required
             />
 
@@ -1041,44 +1045,36 @@ export default function EstimatesNewPage() {
               placeholder="Project Description"
               value={projectDescription}
               onChange={(e) => setProjectDescription(e.target.value)}
-              className="min-h-[100px] w-full rounded-lg border p-3 text-gray-900"
+              className="min-h-[100px] w-full rounded-xl border border-slate-300 p-3 text-slate-950"
             />
 
             <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
-                  Markup %
-                </label>
-
+              <FormField label="Markup %">
                 <input
                   type="number"
                   value={markupPercent}
                   onChange={(e) => setMarkupPercent(e.target.value)}
-                  className="w-full rounded-lg border p-3 text-gray-900"
+                  className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-900">
-                  Valid Until
-                </label>
-
+              <FormField label="Valid Until">
                 <input
                   type="date"
                   value={validUntil}
                   onChange={(e) => setValidUntil(e.target.value)}
-                  className="w-full rounded-lg border p-3 text-gray-900"
+                  className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
                 />
-              </div>
+              </FormField>
             </div>
 
             <div className="space-y-4">
               <div>
-                <h2 className="text-2xl font-bold text-gray-900">
+                <h2 className="text-2xl font-black text-slate-950">
                   Line Items
                 </h2>
 
-                <p className="mt-1 text-sm text-gray-600">
+                <p className="mt-1 text-sm font-medium text-slate-700">
                   Add work items, descriptions, visibility settings, and taxes
                   per line item.
                 </p>
@@ -1097,10 +1093,10 @@ export default function EstimatesNewPage() {
                 return (
                   <div
                     key={item.id}
-                    className="rounded-xl border border-gray-200 p-4"
+                    className="rounded-2xl border border-slate-200 bg-white p-4"
                   >
                     <div className="mb-3 flex items-center justify-between">
-                      <h3 className="text-lg font-semibold text-gray-900">
+                      <h3 className="text-lg font-black text-slate-950">
                         Item {index + 1}
                       </h3>
 
@@ -1108,7 +1104,7 @@ export default function EstimatesNewPage() {
                         <button
                           type="button"
                           onClick={() => removeLineItem(item.id)}
-                          className="rounded bg-red-600 px-3 py-1 text-sm text-white"
+                          className="rounded-xl border border-red-300 bg-white px-3 py-1 text-sm font-semibold text-red-700 hover:bg-red-50"
                         >
                           Remove
                         </button>
@@ -1116,11 +1112,7 @@ export default function EstimatesNewPage() {
                     </div>
 
                     <div className="grid gap-4 md:grid-cols-4">
-                      <div className="md:col-span-2">
-                        <label className="mb-1 block text-sm font-medium text-gray-900">
-                          Work Type
-                        </label>
-
+                      <FormField label="Work Type" className="md:col-span-2">
                         <select
                           value={
                             item.mode === "custom" ? "__custom__" : item.type
@@ -1135,7 +1127,7 @@ export default function EstimatesNewPage() {
 
                             selectPresetLineItem(item.id, nextValue);
                           }}
-                          className="w-full rounded-lg border p-3 text-gray-900"
+                          className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
                         >
                           {presetNames.map((type) => (
                             <option key={type} value={type}>
@@ -1157,7 +1149,7 @@ export default function EstimatesNewPage() {
                                 )
                               }
                               placeholder="Example: Tile Shower Pan"
-                              className="mt-2 w-full rounded-lg border p-3 text-gray-900"
+                              className="mt-2 w-full rounded-xl border border-slate-300 p-3 text-slate-950"
                             />
 
                             <input
@@ -1167,10 +1159,10 @@ export default function EstimatesNewPage() {
                                 updateLineItem(item.id, "unit", e.target.value)
                               }
                               placeholder="Unit, e.g. flat amount, per hour, per sq ft"
-                              className="mt-2 w-full rounded-lg border p-3 text-gray-900"
+                              className="mt-2 w-full rounded-xl border border-slate-300 p-3 text-slate-950"
                             />
 
-                            <label className="mt-2 flex items-center gap-2 text-sm text-gray-700">
+                            <label className="mt-2 flex items-center gap-2 text-sm font-medium text-slate-700">
                               <input
                                 type="checkbox"
                                 checked={item.saveAsPreset}
@@ -1187,60 +1179,50 @@ export default function EstimatesNewPage() {
                           </>
                         )}
 
-                        <p className="mt-1 text-sm text-gray-600">
+                        <p className="mt-1 text-sm font-medium text-slate-600">
                           {item.unit || "custom"}
                         </p>
-                      </div>
+                      </FormField>
 
-                      <div>
-                        <label className="mb-1 block text-sm font-medium text-gray-900">
-                          Quantity
-                        </label>
-
+                      <FormField label="Quantity">
                         <input
                           type="number"
                           value={item.quantity}
                           onChange={(e) =>
                             updateLineItem(item.id, "quantity", e.target.value)
                           }
-                          className="w-full rounded-lg border p-3 text-gray-900"
+                          className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
                         />
-                      </div>
+                      </FormField>
 
-                      <div>
-                        <label className="mb-1 block text-sm font-medium text-gray-900">
-                          Rate
-                        </label>
-
+                      <FormField label="Rate">
                         <input
                           type="number"
                           value={item.rate}
                           onChange={(e) =>
                             updateLineItem(item.id, "rate", e.target.value)
                           }
-                          className="w-full rounded-lg border p-3 text-gray-900"
+                          className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
                         />
-                      </div>
+                      </FormField>
 
                       <div className="md:col-span-4">
-                        <label className="mb-1 block text-sm font-medium text-gray-900">
-                          Description
-                        </label>
+                        <FormField label="Description">
+                          <textarea
+                            value={item.description}
+                            onChange={(e) =>
+                              updateLineItem(
+                                item.id,
+                                "description",
+                                e.target.value
+                              )
+                            }
+                            placeholder="Optional details shown to customer"
+                            className="min-h-[90px] w-full rounded-xl border border-slate-300 p-3 text-slate-950"
+                          />
+                        </FormField>
 
-                        <textarea
-                          value={item.description}
-                          onChange={(e) =>
-                            updateLineItem(
-                              item.id,
-                              "description",
-                              e.target.value
-                            )
-                          }
-                          placeholder="Optional details shown to customer"
-                          className="min-h-[90px] w-full rounded-lg border p-3 text-gray-900"
-                        />
-
-                        <label className="mt-3 flex items-center gap-2 text-sm text-gray-700">
+                        <label className="mt-3 flex items-center gap-2 text-sm font-medium text-slate-700">
                           <input
                             type="checkbox"
                             checked={item.showQuantityRate}
@@ -1256,8 +1238,8 @@ export default function EstimatesNewPage() {
                         </label>
                       </div>
 
-                      <div className="md:col-span-4 rounded-xl border border-gray-200 p-4">
-                        <label className="flex items-center gap-2 text-sm font-medium text-gray-900">
+                      <div className="md:col-span-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <label className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                           <input
                             type="checkbox"
                             checked={item.taxEnabled}
@@ -1274,11 +1256,7 @@ export default function EstimatesNewPage() {
 
                         {item.taxEnabled && (
                           <div className="mt-4 grid gap-4 md:grid-cols-2">
-                            <div>
-                              <label className="mb-1 block text-sm font-medium text-gray-900">
-                                Tax Type
-                              </label>
-
+                            <FormField label="Tax Type">
                               <select
                                 value={item.taxLabel}
                                 onChange={(e) =>
@@ -1288,7 +1266,7 @@ export default function EstimatesNewPage() {
                                     e.target.value
                                   )
                                 }
-                                className="w-full rounded-lg border p-3 text-gray-900"
+                                className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
                               >
                                 <option>Sales Tax</option>
                                 <option>Service Tax</option>
@@ -1296,13 +1274,9 @@ export default function EstimatesNewPage() {
                                 <option>Local Tax</option>
                                 <option>Other</option>
                               </select>
-                            </div>
+                            </FormField>
 
-                            <div>
-                              <label className="mb-1 block text-sm font-medium text-gray-900">
-                                Tax Rate %
-                              </label>
-
+                            <FormField label="Tax Rate %">
                               <input
                                 type="number"
                                 value={item.taxRate}
@@ -1313,40 +1287,28 @@ export default function EstimatesNewPage() {
                                     e.target.value
                                   )
                                 }
-                                className="w-full rounded-lg border p-3 text-gray-900"
+                                className="w-full rounded-xl border border-slate-300 p-3 text-slate-950"
                               />
-                            </div>
+                            </FormField>
                           </div>
                         )}
                       </div>
 
                       <div className="md:col-span-4 grid gap-3 md:grid-cols-3">
-                        <div className="rounded-lg border bg-gray-50 p-3 text-gray-900">
-                          <p className="text-xs uppercase tracking-wide text-gray-500">
-                            Line Total
-                          </p>
-                          <p className="font-semibold">
-                            {formatCurrency(lineTotal)}
-                          </p>
-                        </div>
+                        <MiniTotalCard
+                          label="Line Total"
+                          value={formatCurrency(lineTotal)}
+                        />
 
-                        <div className="rounded-lg border bg-gray-50 p-3 text-gray-900">
-                          <p className="text-xs uppercase tracking-wide text-gray-500">
-                            Tax
-                          </p>
-                          <p className="font-semibold">
-                            {formatCurrency(itemTax)}
-                          </p>
-                        </div>
+                        <MiniTotalCard
+                          label="Tax"
+                          value={formatCurrency(itemTax)}
+                        />
 
-                        <div className="rounded-lg border bg-gray-50 p-3 text-gray-900">
-                          <p className="text-xs uppercase tracking-wide text-gray-500">
-                            Line + Tax
-                          </p>
-                          <p className="font-semibold">
-                            {formatCurrency(lineTotal + itemTax)}
-                          </p>
-                        </div>
+                        <MiniTotalCard
+                          label="Line + Tax"
+                          value={formatCurrency(lineTotal + itemTax)}
+                        />
                       </div>
                     </div>
                   </div>
@@ -1356,7 +1318,7 @@ export default function EstimatesNewPage() {
               <button
                 type="button"
                 onClick={addLineItem}
-                className="rounded bg-blue-600 px-4 py-2 text-white"
+                className="rounded-xl bg-slate-950 px-4 py-2 font-semibold text-white hover:bg-slate-800"
               >
                 Add Line Item
               </button>
@@ -1367,32 +1329,32 @@ export default function EstimatesNewPage() {
                 placeholder="Notes"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="min-h-[120px] w-full rounded-lg border p-3 text-gray-900"
+                className="min-h-[120px] w-full rounded-xl border border-slate-300 p-3 text-slate-950"
               />
 
               <textarea
                 placeholder="Exclusions"
                 value={exclusions}
                 onChange={(e) => setExclusions(e.target.value)}
-                className="min-h-[120px] w-full rounded-lg border p-3 text-gray-900"
+                className="min-h-[120px] w-full rounded-xl border border-slate-300 p-3 text-slate-950"
               />
             </div>
 
-            <div className="space-y-2 rounded-xl bg-gray-50 p-4 text-gray-900">
+            <div className="space-y-2 rounded-2xl bg-slate-50 p-5 text-slate-950 ring-1 ring-slate-200">
               <p>Cost Total: {formatCurrency(costTotal)}</p>
               <p>Markup Amount: {formatCurrency(markupAmount)}</p>
               <p>Subtotal: {formatCurrency(sellingPrice)}</p>
               <p>Total Tax: {formatCurrency(lineItemTaxTotal)}</p>
 
-              <p className="text-xl font-bold">
+              <p className="text-xl font-black">
                 Total: {formatCurrency(finalTotal)}
               </p>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               <button
                 disabled={saving}
-                className="rounded bg-black px-4 py-2 text-white disabled:opacity-50"
+                className="rounded-xl bg-slate-950 px-4 py-2 font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
               >
                 {saving
                   ? editingId
@@ -1407,33 +1369,37 @@ export default function EstimatesNewPage() {
                 <button
                   type="button"
                   onClick={resetForm}
-                  className="rounded border border-gray-300 px-4 py-2 text-gray-900"
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 font-semibold text-slate-800 hover:bg-slate-100"
                 >
                   Cancel Edit
                 </button>
               )}
             </div>
 
-            {message && <p className="text-gray-900">{message}</p>}
+            {message && (
+              <p className="rounded-xl bg-slate-50 p-3 text-sm font-semibold text-slate-900">
+                {message}
+              </p>
+            )}
           </form>
-        </div>
+        </section>
 
-        <div className="rounded-2xl bg-white p-8 shadow">
+        <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-gray-900">
+            <h2 className="text-2xl font-black text-slate-950">
               Saved Estimates
             </h2>
 
             <Link
               href="/estimates"
-              className="rounded border border-gray-300 px-4 py-2 text-gray-900"
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2 font-semibold text-slate-800 hover:bg-slate-100"
             >
               View All Estimates
             </Link>
           </div>
 
           {estimates.length === 0 ? (
-            <p className="text-gray-900">No estimates yet.</p>
+            <p className="text-slate-900">No estimates yet.</p>
           ) : (
             <div className="space-y-4">
               {estimates.map((estimate) => {
@@ -1450,79 +1416,66 @@ export default function EstimatesNewPage() {
                 return (
                   <div
                     key={estimate.id}
-                    className="rounded-xl border border-gray-200 p-4 text-gray-900"
+                    className="rounded-2xl border border-slate-200 p-5 text-slate-950"
                   >
                     <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                       <div>
-                        <p className="text-lg font-bold">
+                        <p className="text-lg font-black">
                           {estimate.customer_name}
                         </p>
-                        <p>{estimate.job_name}</p>
-                        <p className="text-sm text-gray-600">
+                        <p className="font-medium text-slate-700">
+                          {estimate.job_name}
+                        </p>
+                        <p className="text-sm font-medium text-slate-600">
                           Estimate #: {estimate.estimate_number || "—"}
                         </p>
 
                         {estimate.valid_until && (
-                          <p className="text-sm text-gray-600">
+                          <p className="text-sm font-medium text-slate-600">
                             Valid Until: {formatDate(estimate.valid_until)}
                           </p>
                         )}
                       </div>
 
-                      <div className="text-sm text-gray-600">
+                      <div className="text-sm font-medium text-slate-600">
                         Created: {formatDate(estimate.created_at)}
                       </div>
                     </div>
 
                     <div className="mt-4 grid gap-3 md:grid-cols-4">
-                      <div className="rounded-lg bg-gray-50 p-3">
-                        <p className="text-xs uppercase tracking-wide text-gray-500">
-                          Subtotal
-                        </p>
-                        <p className="font-semibold">
-                          {formatCurrency(subtotal)}
-                        </p>
-                      </div>
+                      <MiniTotalCard
+                        label="Subtotal"
+                        value={formatCurrency(subtotal)}
+                      />
 
-                      <div className="rounded-lg bg-gray-50 p-3">
-                        <p className="text-xs uppercase tracking-wide text-gray-500">
-                          Markup
-                        </p>
-                        <p className="font-semibold">
-                          {Number(estimate.markup_percent ?? 0)}% (
-                          {formatCurrency(markup)})
-                        </p>
-                      </div>
+                      <MiniTotalCard
+                        label="Markup"
+                        value={`${Number(estimate.markup_percent ?? 0)}% (${formatCurrency(
+                          markup
+                        )})`}
+                      />
 
-                      <div className="rounded-lg bg-gray-50 p-3">
-                        <p className="text-xs uppercase tracking-wide text-gray-500">
-                          Expenses
-                        </p>
-                        <p className="font-semibold">
-                          {formatCurrency(expenseTotal)}
-                        </p>
-                      </div>
+                      <MiniTotalCard
+                        label="Expenses"
+                        value={formatCurrency(expenseTotal)}
+                      />
 
-                      <div className="rounded-lg bg-gray-50 p-3">
-                        <p className="text-xs uppercase tracking-wide text-gray-500">
-                          Estimated Profit
-                        </p>
-                        <p className="font-semibold">
-                          {formatCurrency(estimatedProfit)}
-                        </p>
-                      </div>
+                      <MiniTotalCard
+                        label="Estimated Profit"
+                        value={formatCurrency(estimatedProfit)}
+                      />
                     </div>
 
                     <div className="mt-4">
-                      <p className="text-base font-bold">
+                      <p className="text-base font-black">
                         Selling Price: {formatCurrency(Number(estimate.amount))}
                       </p>
                     </div>
 
-                    <div className="mt-4 flex flex-wrap gap-2">
+                    <div className="mt-5 flex flex-wrap gap-2">
                       <Link
                         href={`/estimates/${estimate.id}`}
-                        className="rounded bg-black px-3 py-1 text-white"
+                        className="rounded-xl bg-slate-950 px-3 py-1 text-white hover:bg-slate-800"
                       >
                         View Project
                       </Link>
@@ -1530,7 +1483,7 @@ export default function EstimatesNewPage() {
                       <button
                         type="button"
                         onClick={() => handleEdit(estimate)}
-                        className="rounded bg-blue-600 px-3 py-1 text-white"
+                        className="rounded-xl border border-slate-300 bg-white px-3 py-1 text-slate-800 hover:bg-slate-100"
                       >
                         Edit
                       </button>
@@ -1538,7 +1491,7 @@ export default function EstimatesNewPage() {
                       <button
                         type="button"
                         onClick={() => handleDeleteEstimate(estimate.id)}
-                        className="rounded bg-red-600 px-3 py-1 text-white"
+                        className="rounded-xl border border-red-300 bg-white px-3 py-1 text-red-700 hover:bg-red-50"
                       >
                         Delete
                       </button>
@@ -1548,8 +1501,38 @@ export default function EstimatesNewPage() {
               })}
             </div>
           )}
-        </div>
+        </section>
       </div>
     </main>
+  );
+}
+
+function FormField({
+  label,
+  children,
+  className = "",
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <label className="mb-1 block text-sm font-semibold text-slate-950">
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function MiniTotalCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
+      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+        {label}
+      </p>
+      <p className="mt-1 font-black text-slate-950">{value}</p>
+    </div>
   );
 }
