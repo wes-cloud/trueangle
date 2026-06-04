@@ -11,6 +11,8 @@ type AuthUser = {
   email?: string | null;
 };
 
+type CompanyRole = "owner" | "bookkeeper" | "viewer" | null;
+
 type Customer = {
   id: string;
   full_name: string;
@@ -129,6 +131,8 @@ export default function InvoicesPage() {
 
   const [authLoading, setAuthLoading] = useState(true);
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [companyRole, setCompanyRole] = useState<CompanyRole>(null);
+const [companyUserIds, setCompanyUserIds] = useState<string[]>([]);
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [estimates, setEstimates] = useState<Estimate[]>([]);
@@ -158,11 +162,49 @@ export default function InvoicesPage() {
 
   const currentPrintId = editingId || initialInvoiceId || null;
 
-  async function fetchCustomers(currentUserId: string) {
+  async function getCompanyAccess(currentUserId: string) {
+  const { data: memberships, error: membershipError } = await supabase
+    .from("company_members")
+    .select("company_id, role")
+    .eq("user_id", currentUserId)
+    .limit(1);
+
+  if (membershipError) {
+    throw new Error(`Error loading company access: ${membershipError.message}`);
+  }
+
+  const membership = memberships?.[0];
+
+  if (!membership?.company_id) {
+    return {
+      role: "owner" as CompanyRole,
+      userIds: [currentUserId],
+    };
+  }
+
+  const { data: members, error: membersError } = await supabase
+    .from("company_members")
+    .select("user_id")
+    .eq("company_id", membership.company_id);
+
+  if (membersError) {
+    throw new Error(`Error loading company members: ${membersError.message}`);
+  }
+
+  const userIds =
+    members?.map((member) => member.user_id).filter(Boolean) || [];
+
+  return {
+    role: (membership.role || "owner") as CompanyRole,
+    userIds: userIds.length > 0 ? userIds : [currentUserId],
+  };
+}
+
+  async function fetchCustomers(userIds: string[]) {
     const { data, error } = await supabase
       .from("customers")
       .select("id, full_name")
-      .eq("user_id", currentUserId)
+      .in("user_id", userIds)
       .order("full_name", { ascending: true });
 
     if (error) {
@@ -173,11 +215,11 @@ export default function InvoicesPage() {
     setCustomers((data || []) as Customer[]);
   }
 
-  async function fetchEstimates(currentUserId: string) {
+  async function fetchEstimates(userIds: string[]) {
     const { data, error } = await supabase
       .from("estimates")
       .select("id, customer_id, customer_name, job_name, estimate_number, amount")
-      .eq("user_id", currentUserId)
+      .in("user_id", userIds)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -188,13 +230,13 @@ export default function InvoicesPage() {
     setEstimates((data || []) as Estimate[]);
   }
 
-  async function fetchInvoices(currentUserId: string) {
+  async function fetchInvoices(userIds: string[]) {
     const { data, error } = await supabase
       .from("invoices")
       .select(
         "id, user_id, customer_id, estimate_id, invoice_number, title, description, amount, status, issue_date, due_date, notes, created_at, updated_at"
       )
-      .eq("user_id", currentUserId)
+      .in("user_id", userIds)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -205,13 +247,13 @@ export default function InvoicesPage() {
     setInvoices((data || []) as Invoice[]);
   }
 
-  async function fetchPayments(currentUserId: string) {
+  async function fetchPayments(userIds: string[]) {
     const { data, error } = await supabase
       .from("payments")
       .select(
         "id, user_id, invoice_id, amount, payment_date, payment_method, notes, created_at, updated_at"
       )
-      .eq("user_id", currentUserId)
+      .in("user_id", userIds)
       .order("payment_date", { ascending: false })
       .order("created_at", { ascending: false });
 
@@ -223,15 +265,26 @@ export default function InvoicesPage() {
     setPayments((data || []) as Payment[]);
   }
 
-  async function loadPageData(currentUserId: string) {
-    setMessage("");
+async function loadPageData(currentUserId: string) {
+  setMessage("");
+
+  try {
+    const access = await getCompanyAccess(currentUserId);
+
+    setCompanyRole(access.role);
+    setCompanyUserIds(access.userIds);
+
     await Promise.all([
-      fetchCustomers(currentUserId),
-      fetchEstimates(currentUserId),
-      fetchInvoices(currentUserId),
-      fetchPayments(currentUserId),
+      fetchCustomers(access.userIds),
+      fetchEstimates(access.userIds),
+      fetchInvoices(access.userIds),
+      fetchPayments(access.userIds),
     ]);
+  } catch (err) {
+    const error = err as Error;
+    setMessage(error.message || "Unable to load invoices.");
   }
+}
 
   function resetPaymentForm() {
     setPaymentAmount("");
@@ -822,8 +875,15 @@ export default function InvoicesPage() {
               </p>
               <p className="mt-1 text-sm text-gray-500">
                 Signed in as {user.email || "User"}
+{companyRole && companyRole !== "owner"
+  ? ` · ${companyRole} access`
+  : ""}
               </p>
-
+{companyUserIds.length > 1 && (
+  <p className="mt-1 text-xs font-semibold text-gray-500">
+    Showing company invoice data across {companyUserIds.length} users.
+  </p>
+)}
               {selectedEstimateLabel && (
                 <p className="mt-3 rounded-xl bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800">
                   {editingId
