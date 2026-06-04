@@ -10,6 +10,8 @@ type AuthUser = {
   email?: string | null;
 };
 
+type CompanyRole = "owner" | "bookkeeper" | "viewer" | null;
+
 type Customer = {
   id: string;
   user_id?: string | null;
@@ -30,23 +32,84 @@ function formatDate(value?: string | null) {
 
 export default function CustomersPage() {
   const [authLoading, setAuthLoading] = useState(true);
+  const [pageLoading, setPageLoading] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [companyRole, setCompanyRole] = useState<CompanyRole>(null);
+  const [companyUserIds, setCompanyUserIds] = useState<string[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [message, setMessage] = useState("");
 
-  async function loadCustomers(currentUserId: string) {
-    const { data, error } = await supabase
-      .from("customers")
-      .select("*")
-      .eq("user_id", currentUserId)
-      .order("full_name", { ascending: true });
+  function clearPageState() {
+    setCompanyRole(null);
+    setCompanyUserIds([]);
+    setCustomers([]);
+  }
 
-    if (error) {
-      setMessage(`Error loading customers: ${error.message}`);
-      return;
+  async function getCompanyAccess(currentUserId: string) {
+    const { data: memberships, error: membershipError } = await supabase
+      .from("company_members")
+      .select("company_id, role")
+      .eq("user_id", currentUserId)
+      .limit(1);
+
+    if (membershipError) {
+      throw new Error(`Error loading company access: ${membershipError.message}`);
     }
 
-    setCustomers((data || []) as Customer[]);
+    const membership = memberships?.[0];
+
+    if (!membership?.company_id) {
+      return {
+        role: "owner" as CompanyRole,
+        userIds: [currentUserId],
+      };
+    }
+
+    const { data: members, error: membersError } = await supabase
+      .from("company_members")
+      .select("user_id")
+      .eq("company_id", membership.company_id);
+
+    if (membersError) {
+      throw new Error(`Error loading company members: ${membersError.message}`);
+    }
+
+    const userIds =
+      members?.map((member) => member.user_id).filter(Boolean) || [];
+
+    return {
+      role: (membership.role || "owner") as CompanyRole,
+      userIds: userIds.length > 0 ? userIds : [currentUserId],
+    };
+  }
+
+  async function loadCustomers(currentUserId: string) {
+    setPageLoading(true);
+    setMessage("");
+
+    try {
+      const access = await getCompanyAccess(currentUserId);
+
+      setCompanyRole(access.role);
+      setCompanyUserIds(access.userIds);
+
+      const { data, error } = await supabase
+        .from("customers")
+        .select("*")
+        .in("user_id", access.userIds)
+        .order("full_name", { ascending: true });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      setCustomers((data || []) as Customer[]);
+    } catch (err) {
+      const error = err as Error;
+      setMessage(error.message || "Unable to load customers.");
+    } finally {
+      setPageLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -73,6 +136,8 @@ export default function CustomersPage() {
 
       if (safeUser) {
         await loadCustomers(safeUser.id);
+      } else {
+        clearPageState();
       }
 
       setAuthLoading(false);
@@ -95,7 +160,7 @@ export default function CustomersPage() {
       if (nextUser) {
         await loadCustomers(nextUser.id);
       } else {
-        setCustomers([]);
+        clearPageState();
       }
 
       setAuthLoading(false);
@@ -115,7 +180,7 @@ export default function CustomersPage() {
     }
 
     setUser(null);
-    setCustomers([]);
+    clearPageState();
   }
 
   if (authLoading) {
@@ -166,7 +231,22 @@ export default function CustomersPage() {
               </h1>
               <p className="mt-2 text-sm font-medium text-slate-700">
                 Signed in as {user.email || "User"}
+                {companyRole && companyRole !== "owner"
+                  ? ` · ${companyRole} access`
+                  : ""}
               </p>
+
+              {companyUserIds.length > 1 && (
+                <p className="mt-1 text-xs font-semibold text-slate-500">
+                  Showing company customers across {companyUserIds.length} users.
+                </p>
+              )}
+
+              {pageLoading && (
+                <p className="mt-2 text-sm font-semibold text-slate-600">
+                  Refreshing customers...
+                </p>
+              )}
             </div>
 
             <div className="rounded-2xl bg-white px-6 py-5 shadow-sm ring-1 ring-slate-200">
@@ -211,8 +291,8 @@ export default function CustomersPage() {
                 No customers yet.
               </p>
               <p className="mt-2 text-sm font-medium text-slate-600">
-                Customers will show here once you create estimates or add them
-                to your workflow.
+                Customers will show here once estimates or customer records are
+                created.
               </p>
               <Link
                 href="/estimates/new"
