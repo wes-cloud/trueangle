@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -10,7 +10,9 @@ type AppNavProps = {
   onSignOut?: () => void | Promise<void>;
 };
 
-const navGroups = [
+type Role = "owner" | "bookkeeper" | "viewer" | null;
+
+const ownerNavGroups = [
   { label: "Dashboard", icon: "📊", href: "/dashboard" },
   {
     label: "Sales",
@@ -36,10 +38,67 @@ const navGroups = [
   { label: "Settings", icon: "⚙️", href: "/settings" },
 ];
 
+const bookkeeperNavGroups = [
+  { label: "Dashboard", icon: "📊", href: "/dashboard" },
+  {
+    label: "Money",
+    icon: "💰",
+    items: [
+      { href: "/banking", label: "Banking Overview" },
+      { href: "/banking/transactions", label: "Review Transactions" },
+      { href: "/expenses", label: "Expenses" },
+      { href: "/mileage", label: "Mileage" },
+    ],
+  },
+  { label: "Customers", icon: "👥", href: "/customers" },
+  { label: "Reports", icon: "📈", href: "/reports" },
+];
+
 export default function AppNav({ onSignOut }: AppNavProps) {
   const pathname = usePathname();
   const router = useRouter();
+
   const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const [role, setRole] = useState<Role>(null);
+  const [roleLoaded, setRoleLoaded] = useState(false);
+
+  useEffect(() => {
+    async function loadRole() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setRoleLoaded(true);
+        return;
+      }
+
+      const { data } = await supabase
+        .from("company_members")
+        .select("role")
+        .eq("user_id", user.id);
+
+      const hasBookkeeperRole = data?.some(
+        (membership) => membership.role && membership.role !== "owner"
+      );
+
+      const hasOwnerRole = data?.some(
+        (membership) => membership.role === "owner"
+      );
+
+      if (hasBookkeeperRole && !hasOwnerRole) {
+        setRole("bookkeeper");
+      } else {
+        setRole("owner");
+      }
+
+      setRoleLoaded(true);
+    }
+
+    loadRole();
+  }, []);
+
+  const navGroups = role === "bookkeeper" ? bookkeeperNavGroups : ownerNavGroups;
 
   function isActive(href: string) {
     if (href === "/") return pathname === "/";
@@ -94,6 +153,12 @@ export default function AppNav({ onSignOut }: AppNavProps) {
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
           <CompanySwitcher />
+
+          {roleLoaded && role === "bookkeeper" && (
+            <span className="rounded-xl bg-blue-50 px-3 py-2 text-xs font-bold uppercase tracking-wide text-blue-800 ring-1 ring-blue-200">
+              Bookkeeper Access
+            </span>
+          )}
 
           <button
             type="button"
