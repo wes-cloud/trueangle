@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { getActiveCompanyId, setActiveCompanyId } from "@/lib/activeCompany";
+import {
+  clearActiveCompanyId,
+  getActiveCompanyId,
+  setActiveCompanyId,
+} from "@/lib/activeCompany";
 
 type CompanyOption = {
   company_id: string;
@@ -53,23 +57,34 @@ export default function CompanySwitcher() {
 
       const rawRows = data as CompanyOption[];
 
-      const uniqueRows = Array.from(
-        new Map(rawRows.map((row) => [row.company_id, row])).values()
+      // Only show client switcher for bookkeeper/client access.
+      // Owners/contractors should not see this.
+      const bookkeeperRows = rawRows.filter(
+        (row) => row.role && row.role !== "owner"
       );
 
-      const namedRows = uniqueRows.filter((row) => row.company_id);
+      if (bookkeeperRows.length === 0) {
+        clearActiveCompanyId();
+        setCompanies([]);
+        setLoading(false);
+        return;
+      }
 
-      setCompanies(namedRows);
+      const uniqueRows = Array.from(
+        new Map(bookkeeperRows.map((row) => [row.company_id, row])).values()
+      );
+
+      setCompanies(uniqueRows);
 
       const savedCompanyId = getActiveCompanyId();
       const savedIsValid =
         savedCompanyId &&
-        namedRows.some((row) => row.company_id === savedCompanyId);
+        uniqueRows.some((row) => row.company_id === savedCompanyId);
 
       const nextCompanyId =
         savedIsValid && savedCompanyId
           ? savedCompanyId
-          : namedRows[0]?.company_id || "";
+          : uniqueRows[0]?.company_id || "";
 
       if (nextCompanyId) {
         setActiveCompanyId(nextCompanyId);
@@ -96,7 +111,7 @@ export default function CompanySwitcher() {
     window.location.reload();
   }
 
-  if (loading || companies.length <= 1) {
+  if (loading || companies.length === 0) {
     return null;
   }
 
@@ -114,7 +129,6 @@ export default function CompanySwitcher() {
         {companies.map((company) => (
           <option key={company.company_id} value={company.company_id}>
             {getCompanyName(company)}
-            {company.role ? ` (${company.role})` : ""}
           </option>
         ))}
       </select>
