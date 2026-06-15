@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import CompanySwitcher from "@/components/CompanySwitcher";
 
 type AppNavProps = {
   onSignOut?: () => void | Promise<void>;
@@ -38,51 +39,27 @@ const navGroups = [
 export default function AppNav({ onSignOut }: AppNavProps) {
   const pathname = usePathname();
   const router = useRouter();
-
-  const [companyName, setCompanyName] = useState("My Company");
   const [openGroup, setOpenGroup] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function loadCompanyName() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+  function isActive(href: string) {
+    if (href === "/") return pathname === "/";
 
-      if (!user) return;
+    const exactMatchRoutes = [
+      "/estimates",
+      "/invoices",
+      "/expenses",
+      "/banking",
+      "/customers",
+      "/reports",
+      "/settings",
+    ];
 
-      const { data } = await supabase
-        .from("company_settings")
-        .select("company_name")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (data?.company_name) {
-        setCompanyName(data.company_name);
-      }
+    if (exactMatchRoutes.includes(href)) {
+      return pathname === href;
     }
 
-    loadCompanyName();
-  }, []);
-
-function isActive(href: string) {
-  if (href === "/") return pathname === "/";
-
-  const exactMatchRoutes = [
-    "/estimates",
-    "/invoices",
-    "/expenses",
-    "/banking",
-    "/customers",
-    "/reports",
-    "/settings",
-  ];
-
-  if (exactMatchRoutes.includes(href)) {
-    return pathname === href;
+    return pathname === href || pathname.startsWith(`${href}/`);
   }
-
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
 
   function groupIsActive(items?: { href: string; label: string }[]) {
     if (!items) return false;
@@ -102,7 +79,7 @@ function isActive(href: string) {
 
   return (
     <header className="mx-auto mb-6 max-w-6xl rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex flex-col gap-4 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 border-b border-slate-200 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
         <Link href="/" className="flex items-center gap-3">
           <img
             src="/trueangle-logo.png"
@@ -115,10 +92,8 @@ function isActive(href: string) {
           </span>
         </Link>
 
-        <div className="flex items-center justify-between gap-3 sm:justify-end">
-          <p className="max-w-[220px] truncate text-sm font-semibold text-slate-800">
-            {companyName}
-          </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+          <CompanySwitcher />
 
           <button
             type="button"
@@ -159,9 +134,7 @@ function isActive(href: string) {
             <div key={group.label} className="group relative">
               <button
                 type="button"
-                onClick={() =>
-                  setOpenGroup(isOpen ? null : group.label)
-                }
+                onClick={() => setOpenGroup(isOpen ? null : group.label)}
                 className={`flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition sm:w-auto ${
                   active
                     ? "bg-slate-950 text-white"
@@ -175,30 +148,30 @@ function isActive(href: string) {
                 <span className="text-xs">{isOpen ? "▲" : "▼"}</span>
               </button>
 
-<div
-  className={`mt-2 rounded-xl border border-slate-200 bg-white p-2 shadow-lg sm:absolute sm:left-0 sm:top-full sm:z-50 sm:min-w-56 ${
-    isOpen ? "block" : "hidden sm:group-hover:block"
-  }`}
->
-                  {group.items?.map((item) => {
-                    const itemActive = isActive(item.href);
+              <div
+                className={`mt-2 rounded-xl border border-slate-200 bg-white p-2 shadow-lg sm:absolute sm:left-0 sm:top-full sm:z-50 sm:min-w-56 ${
+                  isOpen ? "block" : "hidden sm:group-hover:block"
+                }`}
+              >
+                {group.items?.map((item) => {
+                  const itemActive = isActive(item.href);
 
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        onClick={() => setOpenGroup(null)}
-                        className={`block rounded-lg px-3 py-3 text-sm font-semibold transition ${
-                          itemActive
-                            ? "bg-slate-950 text-white"
-                            : "text-slate-700 hover:bg-slate-100 hover:text-slate-950"
-                        }`}
-                      >
-                        {item.label}
-                      </Link>
-                    );
-                  })}
-                </div>
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setOpenGroup(null)}
+                      className={`block rounded-lg px-3 py-3 text-sm font-semibold transition ${
+                        itemActive
+                          ? "bg-slate-950 text-white"
+                          : "text-slate-700 hover:bg-slate-100 hover:text-slate-950"
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
           );
         })}
