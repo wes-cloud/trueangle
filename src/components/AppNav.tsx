@@ -62,41 +62,40 @@ export default function AppNav({ onSignOut }: AppNavProps) {
   const [role, setRole] = useState<Role>(null);
   const [roleLoaded, setRoleLoaded] = useState(false);
 
-  useEffect(() => {
-    async function loadRole() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+async function loadRole() {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-      if (!user) {
-        setRoleLoaded(true);
-        return;
-      }
+  if (!user) {
+    setRoleLoaded(true);
+    return;
+  }
 
-      const { data } = await supabase
-        .from("company_members")
-        .select("role")
-        .eq("user_id", user.id);
+  const res = await fetch("/api/company/list-access", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      userId: user.id,
+    }),
+  });
 
-      const hasBookkeeperRole = data?.some(
-        (membership) => membership.role && membership.role !== "owner"
-      );
+  const data = await res.json();
 
-      const hasOwnerRole = data?.some(
-        (membership) => membership.role === "owner"
-      );
+  if (res.ok && data.companies && data.companies.length > 0) {
+    setRole("bookkeeper");
+  } else {
+    setRole("owner");
+  }
 
-      if (hasBookkeeperRole && !hasOwnerRole) {
-        setRole("bookkeeper");
-      } else {
-        setRole("owner");
-      }
+  setRoleLoaded(true);
+}
 
-      setRoleLoaded(true);
-    }
-
-    loadRole();
-  }, []);
+useEffect(() => {
+  loadRole();
+}, []);
 
   const navGroups = role === "bookkeeper" ? bookkeeperNavGroups : ownerNavGroups;
 
