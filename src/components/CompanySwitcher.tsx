@@ -51,18 +51,25 @@ export default function CompanySwitcher() {
         return;
       }
 
-      const rows = data as CompanyOption[];
-      setCompanies(rows);
+      const rawRows = data as CompanyOption[];
+
+      const uniqueRows = Array.from(
+        new Map(rawRows.map((row) => [row.company_id, row])).values()
+      );
+
+      const namedRows = uniqueRows.filter((row) => row.company_id);
+
+      setCompanies(namedRows);
 
       const savedCompanyId = getActiveCompanyId();
       const savedIsValid =
         savedCompanyId &&
-        rows.some((row) => row.company_id === savedCompanyId);
+        namedRows.some((row) => row.company_id === savedCompanyId);
 
       const nextCompanyId =
         savedIsValid && savedCompanyId
           ? savedCompanyId
-          : rows[0]?.company_id || "";
+          : namedRows[0]?.company_id || "";
 
       if (nextCompanyId) {
         setActiveCompanyId(nextCompanyId);
@@ -80,7 +87,7 @@ export default function CompanySwitcher() {
       ? company.companies[0]
       : company.companies;
 
-    return companyData?.name || "My Company";
+    return companyData?.name || "Unnamed Company";
   }
 
   function handleCompanyChange(companyId: string) {
@@ -102,7 +109,7 @@ export default function CompanySwitcher() {
       <select
         value={activeCompanyId}
         onChange={(e) => handleCompanyChange(e.target.value)}
-        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-950"
+        className="max-w-[260px] rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-950"
       >
         {companies.map((company) => (
           <option key={company.company_id} value={company.company_id}>
