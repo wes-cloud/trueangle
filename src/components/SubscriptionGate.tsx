@@ -7,22 +7,13 @@ import { supabase } from "@/lib/supabase";
 
 type SubscriptionStatus = "loading" | "allowed" | "blocked" | "signed-out";
 
-const PUBLIC_PATHS = [
-  "/",
-  "/auth",
-  "/start-trial",
-  "/trial-success",
-];
+const PUBLIC_PATHS = ["/", "/auth", "/start-trial", "/trial-success"];
 
-const PUBLIC_PREFIXES = [
-  "/approve-estimate",
-];
+const PUBLIC_PREFIXES = ["/approve-estimate", "/invite"];
 
 function isPublicPath(pathname: string | null) {
   if (!pathname) return true;
-
   if (PUBLIC_PATHS.includes(pathname)) return true;
-
   return PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
@@ -53,15 +44,29 @@ export default function SubscriptionGate({
           error: userError,
         } = await supabase.auth.getUser();
 
-        if (userError) {
-          throw new Error(userError.message);
-        }
+        if (userError) throw new Error(userError.message);
 
         if (!user) {
           if (isMounted) setStatus("signed-out");
           return;
         }
 
+        // Bookkeepers get free access if they are attached to a company.
+        const { data: memberships } = await supabase
+          .from("company_members")
+          .select("role")
+          .eq("user_id", user.id);
+
+        const isBookkeeper =
+          memberships?.some((membership) => membership.role !== "owner") ||
+          false;
+
+        if (isBookkeeper) {
+          if (isMounted) setStatus("allowed");
+          return;
+        }
+
+        // Owners/contractors still need active subscription or trial.
         const res = await fetch("/api/access/check", {
           method: "POST",
           headers: {
@@ -86,7 +91,7 @@ export default function SubscriptionGate({
 
         if (isMounted) {
           setMessage(error.message || "Access check failed.");
-          setStatus("allowed");
+          setStatus("blocked");
         }
       }
     }
@@ -139,28 +144,26 @@ export default function SubscriptionGate({
           Start 14-Day Free Trial
         </Link>
       </div>
-      {/* FOOTER */}
-<footer className="border-t bg-white px-6 py-10">
-  <div className="mx-auto max-w-6xl flex flex-col items-center justify-between gap-4 md:flex-row">
-    
-    <p className="text-sm text-slate-600">
-      © {new Date().getFullYear()} TrueAngle
-    </p>
 
-    <div className="flex gap-6 text-sm font-medium text-slate-700">
-      <a href="/terms" className="hover:text-slate-950">
-        Terms
-      </a>
-      <a href="/privacy" className="hover:text-slate-950">
-        Privacy
-      </a>
-      <a href="/support" className="hover:text-slate-950">
-        Support
-      </a>
-    </div>
+      <footer className="mt-10 border-t bg-white px-6 py-10">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 md:flex-row">
+          <p className="text-sm text-slate-600">
+            © {new Date().getFullYear()} TrueAngle
+          </p>
 
-  </div>
-</footer>
+          <div className="flex gap-6 text-sm font-medium text-slate-700">
+            <a href="/terms" className="hover:text-slate-950">
+              Terms
+            </a>
+            <a href="/privacy" className="hover:text-slate-950">
+              Privacy
+            </a>
+            <a href="/support" className="hover:text-slate-950">
+              Support
+            </a>
+          </div>
+        </div>
+      </footer>
     </main>
   );
 }
