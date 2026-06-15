@@ -93,50 +93,50 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleAddBookkeeper() {
-    if (!user) {
-      setMessage("You must be signed in.");
-      return;
-    }
-
-    if (!bookkeeperEmail.trim()) {
-      setMessage("Enter the bookkeeper's email first.");
-      return;
-    }
-
-    setAddingBookkeeper(true);
-    setMessage("Adding bookkeeper...");
-
-    try {
-      const res = await fetch("/api/company/add-member", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email: bookkeeperEmail.trim(),
-          ownerUserId: user.id,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        alert(data.error || "Could not add bookkeeper.");
-setMessage(data.error || "Could not add bookkeeper.");
-        return;
-      }
-
-      setBookkeeperEmail("");
-      alert("Bookkeeper added successfully.");
-setMessage("Bookkeeper added. Hopefully they know what they're doing.");
-    } catch (err) {
-      console.error(err);
-      setMessage("Something went wrong adding the bookkeeper.");
-    } finally {
-      setAddingBookkeeper(false);
-    }
+async function handleAddBookkeeper() {
+  if (!user) {
+    setMessage("You must be signed in.");
+    return;
   }
+
+  if (!bookkeeperEmail.trim()) {
+    setMessage("Enter the bookkeeper's email first.");
+    return;
+  }
+
+  setAddingBookkeeper(true);
+  setMessage("Creating invite...");
+
+  try {
+    const res = await fetch("/api/company/send-invite", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: bookkeeperEmail.trim(),
+        ownerUserId: user.id,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      setMessage(data.error || "Could not create invite.");
+      return;
+    }
+
+    setBookkeeperEmail("");
+    setMessage(
+      `Invite created. Temporary invite link: ${data.inviteUrl}`
+    );
+  } catch (err) {
+    console.error(err);
+    setMessage("Something went wrong creating the invite.");
+  } finally {
+    setAddingBookkeeper(false);
+  }
+}
 
 async function getOrCreateCompany(currentUser: AuthUser) {
   const { data: memberships } = await supabase
@@ -509,8 +509,7 @@ async function getOrCreateCompany(currentUser: AuthUser) {
           </h2>
 
           <p className="mt-2 text-sm text-slate-700">
-            Add one bookkeeper or accountant to help categorize expenses and
-            review reports. They need to create a free TrueAngle account first.
+            Send an invite link so your bookkeeper can create a free account and connect to your company.
           </p>
 
           <div className="mt-6 grid gap-3 sm:grid-cols-[1fr_auto]">
@@ -528,7 +527,7 @@ async function getOrCreateCompany(currentUser: AuthUser) {
               disabled={addingBookkeeper}
               className="rounded-lg bg-slate-950 px-5 py-3 font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-500"
             >
-              {addingBookkeeper ? "Adding..." : "Add Bookkeeper"}
+              {addingBookkeeper ? "Creating Invite..." : "Send Invite"}
             </button>
           </div>
 
