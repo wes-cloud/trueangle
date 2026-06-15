@@ -30,68 +30,43 @@ export default function CompanySwitcher() {
         return;
       }
 
-      const { data: memberships, error: membershipError } = await supabase
-        .from("company_members")
-        .select("company_id, role")
-        .eq("user_id", user.id);
+      const res = await fetch("/api/company/list-access", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: user.id,
+        }),
+      });
 
-      if (membershipError || !memberships) {
+      const data = await res.json();
+
+      if (!res.ok || !data.companies) {
         setLoading(false);
         return;
       }
 
-      const bookkeeperMemberships = memberships.filter(
-        (membership) => membership.role && membership.role !== "owner"
-      );
+      const rows = data.companies as CompanyOption[];
 
-      if (bookkeeperMemberships.length === 0) {
+      if (rows.length === 0) {
         clearActiveCompanyId();
         setCompanies([]);
         setLoading(false);
         return;
       }
 
-      const uniqueMemberships = Array.from(
-        new Map(
-          bookkeeperMemberships.map((membership) => [
-            membership.company_id,
-            membership,
-          ])
-        ).values()
-      );
-
-      const companyIds = uniqueMemberships
-        .map((membership) => membership.company_id)
-        .filter(Boolean);
-
-      const { data: companyRows } = await supabase
-        .from("companies")
-        .select("id, name")
-        .in("id", companyIds);
-
-      const options: CompanyOption[] = uniqueMemberships.map((membership) => {
-        const matchingCompany = companyRows?.find(
-          (company) => company.id === membership.company_id
-        );
-
-        return {
-          company_id: membership.company_id,
-          role: membership.role,
-          name: matchingCompany?.name || "Unnamed Company",
-        };
-      });
-
-      setCompanies(options);
+      setCompanies(rows);
 
       const savedCompanyId = getActiveCompanyId();
       const savedIsValid =
         savedCompanyId &&
-        options.some((company) => company.company_id === savedCompanyId);
+        rows.some((company) => company.company_id === savedCompanyId);
 
       const nextCompanyId =
         savedIsValid && savedCompanyId
           ? savedCompanyId
-          : options[0]?.company_id || "";
+          : rows[0]?.company_id || "";
 
       if (nextCompanyId) {
         setActiveCompanyId(nextCompanyId);
