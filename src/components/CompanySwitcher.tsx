@@ -11,14 +11,7 @@ import {
 type CompanyOption = {
   company_id: string;
   role: string | null;
-  companies:
-    | {
-        name: string | null;
-      }
-    | {
-        name: string | null;
-      }[]
-    | null;
+  name: string;
 };
 
 export default function CompanySwitcher() {
@@ -37,54 +30,68 @@ export default function CompanySwitcher() {
         return;
       }
 
-      const { data, error } = await supabase
+      const { data: memberships, error: membershipError } = await supabase
         .from("company_members")
-        .select(
-          `
-          company_id,
-          role,
-          companies (
-            name
-          )
-        `
-        )
+        .select("company_id, role")
         .eq("user_id", user.id);
 
-      if (error || !data) {
+      if (membershipError || !memberships) {
         setLoading(false);
         return;
       }
 
-      const rawRows = data as CompanyOption[];
-
-      // Only show client switcher for bookkeeper/client access.
-      // Owners/contractors should not see this.
-      const bookkeeperRows = rawRows.filter(
-        (row) => row.role && row.role !== "owner"
+      const bookkeeperMemberships = memberships.filter(
+        (membership) => membership.role && membership.role !== "owner"
       );
 
-      if (bookkeeperRows.length === 0) {
+      if (bookkeeperMemberships.length === 0) {
         clearActiveCompanyId();
         setCompanies([]);
         setLoading(false);
         return;
       }
 
-      const uniqueRows = Array.from(
-        new Map(bookkeeperRows.map((row) => [row.company_id, row])).values()
+      const uniqueMemberships = Array.from(
+        new Map(
+          bookkeeperMemberships.map((membership) => [
+            membership.company_id,
+            membership,
+          ])
+        ).values()
       );
 
-      setCompanies(uniqueRows);
+      const companyIds = uniqueMemberships
+        .map((membership) => membership.company_id)
+        .filter(Boolean);
+
+      const { data: companyRows } = await supabase
+        .from("companies")
+        .select("id, name")
+        .in("id", companyIds);
+
+      const options: CompanyOption[] = uniqueMemberships.map((membership) => {
+        const matchingCompany = companyRows?.find(
+          (company) => company.id === membership.company_id
+        );
+
+        return {
+          company_id: membership.company_id,
+          role: membership.role,
+          name: matchingCompany?.name || "Unnamed Company",
+        };
+      });
+
+      setCompanies(options);
 
       const savedCompanyId = getActiveCompanyId();
       const savedIsValid =
         savedCompanyId &&
-        uniqueRows.some((row) => row.company_id === savedCompanyId);
+        options.some((company) => company.company_id === savedCompanyId);
 
       const nextCompanyId =
         savedIsValid && savedCompanyId
           ? savedCompanyId
-          : uniqueRows[0]?.company_id || "";
+          : options[0]?.company_id || "";
 
       if (nextCompanyId) {
         setActiveCompanyId(nextCompanyId);
@@ -96,14 +103,6 @@ export default function CompanySwitcher() {
 
     loadCompanies();
   }, []);
-
-  function getCompanyName(company: CompanyOption) {
-    const companyData = Array.isArray(company.companies)
-      ? company.companies[0]
-      : company.companies;
-
-    return companyData?.name || "Unnamed Company";
-  }
 
   function handleCompanyChange(companyId: string) {
     setActiveCompanyId(companyId);
@@ -128,7 +127,7 @@ export default function CompanySwitcher() {
       >
         {companies.map((company) => (
           <option key={company.company_id} value={company.company_id}>
-            {getCompanyName(company)}
+            {company.name}
           </option>
         ))}
       </select>
