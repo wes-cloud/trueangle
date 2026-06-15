@@ -16,35 +16,35 @@ export default function InviteAcceptPage() {
   const [password, setPassword] = useState("");
   const [working, setWorking] = useState(false);
 
-  useEffect(() => {
-    async function loadInvite() {
-      const { data, error } = await supabase
-        .from("company_invites")
-        .select("email, status")
-        .eq("invite_token", token)
-        .maybeSingle();
+useEffect(() => {
+  async function loadInvite() {
+    const res = await fetch("/api/company/get-invite", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        inviteToken: token,
+      }),
+    });
 
-      if (error || !data) {
-        setStatus("error");
-        setMessage("This invite link is invalid or expired.");
-        return;
-      }
+    const data = await res.json();
 
-      if (data.status !== "pending") {
-        setStatus("error");
-        setMessage("This invite has already been used.");
-        return;
-      }
-
-      setInviteEmail(data.email || "");
-      setStatus("ready");
-      setMessage("Create your free bookkeeper account.");
+    if (!res.ok) {
+      setStatus("error");
+      setMessage(data.error || "This invite link is invalid or expired.");
+      return;
     }
 
-    if (token) {
-      loadInvite();
-    }
-  }, [token]);
+    setInviteEmail(data.email || "");
+    setStatus("ready");
+    setMessage("Create your free bookkeeper account.");
+  }
+
+  if (token) {
+    loadInvite();
+  }
+}, [token]);
 
   async function handleAcceptInvite() {
     if (!inviteEmail || !password) {
