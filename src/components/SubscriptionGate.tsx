@@ -25,6 +25,8 @@ export default function SubscriptionGate({
   const pathname = usePathname();
   const [status, setStatus] = useState<SubscriptionStatus>("loading");
   const [message, setMessage] = useState("");
+  const [trialDays, setTrialDays] = useState<number | null>(null);
+  const [blockReason, setBlockReason] = useState("");
 
   useEffect(() => {
     let isMounted = true;
@@ -33,6 +35,8 @@ export default function SubscriptionGate({
       try {
         setStatus("loading");
         setMessage("");
+        setTrialDays(null);
+        setBlockReason("");
 
         if (isPublicPath(pathname)) {
           if (isMounted) setStatus("allowed");
@@ -51,30 +55,18 @@ export default function SubscriptionGate({
           return;
         }
 
-        // Bookkeepers get free access if they are attached to a company.
-        const { data: memberships } = await supabase
-          .from("company_members")
-          .select("role")
-          .eq("user_id", user.id);
-
-        const isBookkeeper =
-          memberships?.some((membership) => membership.role !== "owner") ||
-          false;
-
-        if (isBookkeeper) {
-          if (isMounted) setStatus("allowed");
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) {
+          if (isMounted) setStatus("signed-out");
           return;
         }
 
-        // Owners/contractors still need active subscription or trial.
         const res = await fetch("/api/access/check", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
           },
-          body: JSON.stringify({
-            userId: user.id,
-          }),
         });
 
         if (!res.ok) {
@@ -85,6 +77,8 @@ export default function SubscriptionGate({
 
         if (isMounted) {
           setStatus(data.allowed ? "allowed" : "blocked");
+          setTrialDays(typeof data.daysRemaining === "number" ? data.daysRemaining : null);
+          setBlockReason(data.reason || "");
         }
       } catch (err) {
         const error = err as Error;
@@ -121,6 +115,11 @@ export default function SubscriptionGate({
             {message}
           </div>
         )}
+        {status === "allowed" && trialDays !== null && (
+          <div className="bg-orange-50 px-4 py-2 text-center text-sm font-medium text-orange-900">
+            Free trial: {trialDays} {trialDays === 1 ? "day" : "days"} remaining
+          </div>
+        )}
         {children}
       </>
     );
@@ -131,17 +130,19 @@ export default function SubscriptionGate({
       <div className="mx-auto max-w-xl rounded-3xl bg-white p-8 shadow">
         <p className="text-sm font-bold uppercase text-slate-600">TrueAngle</p>
 
-        <h1 className="mt-2 text-4xl font-black">Start your free trial.</h1>
+        <h1 className="mt-2 text-4xl font-black">{blockReason === "trial_expired" ? "Your free trial has ended." : "Start your free trial."}</h1>
 
         <p className="mt-3 text-slate-700">
-          Your account does not have an active subscription or trial yet.
+          {blockReason === "trial_expired"
+            ? "Your 14-day trial has expired. Choose a subscription to continue using TrueAngle."
+            : "Your account does not have an active subscription or trial yet."}
         </p>
 
         <Link
           href="/start-trial"
           className="mt-6 inline-block rounded-xl bg-black px-5 py-3 font-bold text-white hover:bg-slate-800"
         >
-          Start 14-Day Free Trial
+          {blockReason === "trial_expired" ? "View subscription options" : "Start 14-Day Free Trial"}
         </Link>
       </div>
 
