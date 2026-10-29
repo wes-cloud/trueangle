@@ -26,6 +26,20 @@ function getBaseUrl() {
   );
 }
 
+async function authorizeInvoice(request: Request, invoiceId: string) {
+  const token = request.headers.get("authorization")?.match(/^Bearer (.+)$/i)?.[1];
+  if (!token) return false;
+  const authClient = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+  const { data: { user }, error } = await authClient.auth.getUser(token);
+  if (error || !user) return false;
+  const { data: invoice } = await supabaseAdmin.from("invoices").select("user_id, company_id").eq("id", invoiceId).maybeSingle();
+  if (!invoice) return false;
+  if (invoice.user_id === user.id) return true;
+  if (!invoice.company_id) return false;
+  const { data: membership } = await supabaseAdmin.from("company_members").select("role").eq("company_id", invoice.company_id).eq("user_id", user.id).maybeSingle();
+  return membership?.role === "owner" || membership?.role === "bookkeeper";
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -38,11 +52,15 @@ export async function POST(req: NextRequest) {
 
     const paymentAmount = Number(amount);
 
-    if (!paymentAmount || paymentAmount <= 0) {
+    if (!Number.isFinite(paymentAmount) || paymentAmount <= 0 || !Number.isInteger(paymentAmount * 100)) {
       return NextResponse.json(
         { error: "Payment amount must be greater than 0." },
         { status: 400 }
       );
+    }
+
+    if (!(await authorizeInvoice(req, invoiceId))) {
+      return NextResponse.json({ error: "Unauthorized invoice access." }, { status: 403 });
     }
 
     const { data: invoice, error: invoiceError } = await supabaseAdmin
@@ -60,6 +78,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const { data: paidPayments, error: paidError } = await supabaseAdmin.from("payments").select("amount").eq("invoice_id", invoice.id);
+    if (paidError) return NextResponse.json({ error: "Unable to verify balance." }, { status: 500 });
+    const balance = Math.round((Number(invoice.amount || 0) - (paidPayments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0)) * 100);
+    if (Math.round(paymentAmount * 100) > balance || balance <= 0) {
+      return NextResponse.json({ error: "Payment exceeds remaining invoice balance." }, { status: 400 });
+    }
+    if (!invoice.customer_id) return NextResponse.json({ error: "Invoice has no customer." }, { status: 400 });
     const { data: customer } = await supabaseAdmin
       .from("customers")
       .select("full_name, email")

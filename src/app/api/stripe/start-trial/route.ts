@@ -44,7 +44,16 @@ export async function POST(request: Request) {
       (user) => user.email?.toLowerCase() === email
     );
 
-    let userId = existingUser?.id;
+    // Existing customers must use an authenticated renewal flow, not a fresh trial.
+    // Never let an unauthenticated request start another trial for an existing account.
+    if (existingUser) {
+      return NextResponse.json(
+        { error: "This email already has an account. Please sign in to manage your subscription." },
+        { status: 409 }
+      );
+    }
+
+    let userId: string | undefined;
 
     if (!userId) {
       const { data, error } = await supabaseAdmin.auth.admin.createUser({

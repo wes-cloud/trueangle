@@ -23,6 +23,20 @@ function getBaseUrl() {
   );
 }
 
+async function authorizeInvoice(request: Request, invoiceId: string) {
+  const token = request.headers.get("authorization")?.match(/^Bearer (.+)$/i)?.[1];
+  if (!token) return false;
+  const authClient = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+  const { data: { user }, error } = await authClient.auth.getUser(token);
+  if (error || !user) return false;
+  const { data: invoice } = await supabaseAdmin.from("invoices").select("user_id, company_id").eq("id", invoiceId).maybeSingle();
+  if (!invoice) return false;
+  if (invoice.user_id === user.id) return true;
+  if (!invoice.company_id) return false;
+  const { data: membership } = await supabaseAdmin.from("company_members").select("role").eq("company_id", invoice.company_id).eq("user_id", user.id).maybeSingle();
+  return membership?.role === "owner" || membership?.role === "bookkeeper";
+}
+
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as RequestBody;
@@ -38,11 +52,15 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!amount || amount <= 0) {
+    if (!Number.isFinite(amount) || amount <= 0 || !Number.isInteger(amount * 100)) {
       return NextResponse.json(
         { error: "Payment amount must be greater than 0." },
         { status: 400 }
       );
+    }
+
+    if (!(await authorizeInvoice(request, invoiceId))) {
+      return NextResponse.json({ error: "Unauthorized invoice access." }, { status: 403 });
     }
 
     const { data: invoice, error: invoiceError } = await supabaseAdmin

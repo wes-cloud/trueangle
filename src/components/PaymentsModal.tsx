@@ -157,10 +157,17 @@ const scheduledPercent =
     setSending(true);
     setMessage("Sending payment request...");
 
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      setSending(false);
+      setMessage("Please sign in again before requesting payment.");
+      return;
+    }
     const response = await fetch("/api/send-invoice-deposit-email", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
       },
       body: JSON.stringify({
         invoiceId: invoice.id,
@@ -296,10 +303,17 @@ if (existingScheduledTotal + scheduleAmount > invoiceTotal) {
     setSending(true);
     setMessage(`Sending request for ${item.label}...`);
 
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      setSending(false);
+      setMessage("Please sign in again before requesting payment.");
+      return;
+    }
     const response = await fetch("/api/send-invoice-deposit-email", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
       },
       body: JSON.stringify({
         invoiceId: invoice.id,
