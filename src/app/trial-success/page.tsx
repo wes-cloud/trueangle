@@ -1,60 +1,22 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-
 export default function TrialSuccessPage() {
-  const [message, setMessage] = useState("Finishing your setup...");
-
-  useEffect(() => {
-    async function finishSetup() {
-      const savedLogin = sessionStorage.getItem("trueangle_pending_login");
-
-      if (!savedLogin) {
-        setMessage("Trial started. Please sign in to continue.");
-        window.location.href = "/auth";
-        return;
-      }
-
-      const parsed = JSON.parse(savedLogin) as {
-        email?: string;
-        password?: string;
-      };
-
-      if (!parsed.email || !parsed.password) {
-        setMessage("Trial started. Please sign in to continue.");
-        window.location.href = "/auth";
-        return;
-      }
-
-      const { error } = await supabase.auth.signInWithPassword({
-        email: parsed.email,
-        password: parsed.password,
-      });
-
-      sessionStorage.removeItem("trueangle_pending_login");
-
-      if (error) {
-        setMessage("Trial started. Please sign in to continue.");
-        window.location.href = "/auth";
-        return;
-      }
-
-      window.location.href = "/dashboard?trial=success";
+  const [message,setMessage]=useState("Verifying your trial...");
+  useEffect(()=>{
+    async function confirm() {
+      try {
+        const sessionId=new URLSearchParams(window.location.search).get("session_id");
+        if (!sessionId) throw new Error("Missing checkout session.");
+        const {data:{session}}=await supabase.auth.getSession();
+        if (!session) { setMessage("Please sign in to finish setup."); return; }
+        const res=await fetch("/api/stripe/confirm-trial",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${session.access_token}`},body:JSON.stringify({session_id:sessionId})});
+        const data=await res.json();
+        if (!res.ok) throw new Error(data.error || "Unable to confirm trial.");
+        window.location.replace("/dashboard?trial=success");
+      } catch(error) { setMessage((error instanceof Error?error.message:"Unable to confirm trial.")+" Please contact support; do not start another checkout."); }
     }
-
-    finishSetup();
-  }, []);
-
-  return (
-    <main className="min-h-screen bg-slate-100 p-8 text-slate-950">
-      <div className="mx-auto max-w-md rounded-3xl bg-white p-8 shadow">
-        <p className="text-sm font-bold uppercase text-slate-600">
-          TrueAngle
-        </p>
-        <h1 className="mt-2 text-3xl font-black">Setting up your account</h1>
-        <p className="mt-3 text-slate-700">{message}</p>
-      </div>
-    </main>
-  );
+    confirm();
+  },[]);
+  return <main className="min-h-screen bg-slate-100 p-8 text-slate-950"><div className="mx-auto max-w-md rounded-3xl bg-white p-8 shadow"><h1 className="text-3xl font-black">Setting up your account</h1><p className="mt-3">{message}</p><a href="/auth" className="mt-4 inline-block underline">Sign in</a></div></main>;
 }
