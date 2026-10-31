@@ -21,23 +21,23 @@ export async function POST(request: Request) {
       const auth = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
       const { data, error } = await auth.auth.signInWithPassword({ email, password });
       if (error || data.user?.id !== userId) {
-        return NextResponse.json({ error: "This email already has an account. Enter its correct password or reset it from Sign in." }, { status: 401 });
+        return NextResponse.json({ error: "Unable to complete account setup with those credentials. Please sign in or recover access if you have an account." }, { status: 401 });
       }
     } else {
       const { data, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
-      if (error || !data.user) return NextResponse.json({ error: error?.message || "Unable to create account." }, { status: 400 });
+      if (error || !data.user) return NextResponse.json({ error: "Unable to complete account setup. Please check your details or recover access." }, { status: 400 });
       userId = data.user.id;
     }
 
     const { data: current, error: dbError } = await admin.from("subscriptions").select("status").eq("user_id", userId).maybeSingle();
     if (dbError) throw dbError;
     if (current && ["trialing", "active", "past_due"].includes(current.status)) {
-      return NextResponse.json({ error: "Your account already has a subscription. Sign in to continue." }, { status: 409 });
+      return NextResponse.json({ error: "Unable to start another trial. Please sign in to continue." }, { status: 409 });
     }
     // Also check Stripe directly: a delayed webhook must not permit duplicate subscriptions.
     const existing = await stripe.subscriptions.search({ query: "metadata['user_id']:'" + userId + "'", limit: 20 });
     if (existing.data.some(s => ["trialing", "active", "past_due", "incomplete"].includes(s.status))) {
-      return NextResponse.json({ error: "A subscription already exists for this account. Sign in or contact support." }, { status: 409 });
+      return NextResponse.json({ error: "Unable to start another trial. Please sign in or contact support." }, { status: 409 });
     }
 
     const session = await stripe.checkout.sessions.create({
