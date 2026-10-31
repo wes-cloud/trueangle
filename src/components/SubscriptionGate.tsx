@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabase";
 
 type SubscriptionStatus = "loading" | "allowed" | "blocked" | "signed-out";
 
-const PUBLIC_PATHS = ["/", "/auth", "/start-trial", "/trial-success"];
+const PUBLIC_PATHS = ["/", "/auth", "/start-trial", "/trial-success", "/forgot-password", "/reset-password"];
 
 const PUBLIC_PREFIXES = ["/approve-estimate", "/invite"];
 
