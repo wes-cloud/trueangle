@@ -117,6 +117,8 @@ export default function AuthPage() {
             </p>
           )}
 
+          {!isSignUp && <a href="/forgot-password" className="mt-5 block text-center text-sm font-bold text-slate-700 underline">Forgot password?</a>}
+
           <div className="mt-6 text-center">
             <button
               type="button"

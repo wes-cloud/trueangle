@@ -95,7 +95,7 @@ export default function StartTrialPage() {
             {step === "confirm" && <div><label htmlFor="trial-confirm" className="mb-2 block text-sm font-semibold">Confirm password for a new account</label><input id="trial-confirm" className={field} type="password" autoComplete="new-password" minLength={8} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required /></div>}
             <button disabled={loading} type="submit" className="w-full rounded-xl bg-slate-950 px-5 py-3.5 font-bold text-white transition hover:bg-slate-800 disabled:opacity-50">{loading ? "Please wait..." : step === "password" ? "Continue securely →" : "Start 14-day free trial →"}</button>
             {step === "confirm" && <button type="button" onClick={() => {setStep("password");setMessage("");setConfirmPassword("");}} className="block w-full text-center text-sm font-semibold underline">Retry password</button>}
-            <a href="/auth" className="block text-center text-sm font-semibold underline">Sign in or reset your password</a>
+            <a href="/forgot-password" className="block text-center text-sm font-semibold underline">Forgot your password?</a>
           </form>
         )}
         {message && <p role="alert" className="mt-5 rounded-xl bg-amber-50 p-3 text-sm font-medium text-amber-950">{message}</p>}
