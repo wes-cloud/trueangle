@@ -3,17 +3,23 @@ import type Stripe from "stripe";
 import { isTerminalSubscription } from "@/lib/subscription-status";
 import {
   billingAdmin, ensureLifecycle, isMissingStripeResource, readLifecycle,
-  readSubscription, stripe, stripeId, syncSubscription, type CheckoutAttempt, type Lifecycle,
+  readSubscription, requireSubscriptionOwner, stripe, stripeId, syncSubscription, type CheckoutAttempt, type Lifecycle,
 } from "./billing";
 
 type CheckoutIntent = "trial" | "reactivate";
 type CheckoutResult = { url: string } | { error: string };
 
-async function storeCheckout(userId: string, lifecycle: Lifecycle, checkout: CheckoutAttempt) {
+async function storeCheckout(
+  userId: string, lifecycle: Lifecycle, checkout: CheckoutAttempt, retainIntroHistory = false
+) {
   const update = billingAdmin.from("subscription_lifecycle")
-    .update({ checkout, revision: lifecycle.revision + 1 })
+    .update({
+      checkout,
+      revision: lifecycle.revision + 1,
+      ...(retainIntroHistory ? { intro_used: true } : {}),
+    })
     .eq("user_id", userId).eq("revision", lifecycle.revision);
-  const { data, error } = await update.select("intro_used, revision, checkout").maybeSingle();
+  const { data, error } = await update.select("intro_used, legacy_unverified, revision, checkout").maybeSingle();
   if (error) throw error;
   return data as Lifecycle | null;
 }
@@ -51,7 +57,7 @@ async function currentStripeSubscription(userId: string, id: string, customerId:
     return { terminal: true, customer: null };
   }
   const subscription = await stripe.subscriptions.retrieve(id);
-  if (subscription.metadata.user_id !== userId) throw new Error("Stripe subscription ownership mismatch");
+  await requireSubscriptionOwner(userId, subscription);
   return { terminal: isTerminalSubscription(subscription.status), customer };
 }
 
@@ -62,7 +68,7 @@ export async function openCheckout(userId: string, email: string, intent: Checko
     if (!lifecycle) throw new Error("Missing subscription lifecycle");
     const current = await readSubscription(userId);
     let customerId: string | null = null;
-    let introUsed = lifecycle.intro_used || !!current?.trial_end ||
+    let introUsed = lifecycle.intro_used || lifecycle.legacy_unverified || !!current?.trial_end ||
       !!(current && current.status !== "inactive");
 
     if (current?.stripe_subscription_id) {
@@ -77,8 +83,8 @@ export async function openCheckout(userId: string, email: string, intent: Checko
         query: `metadata['user_id']:'${userId}'`,
         limit: 100,
       });
-      const existing = historical.data.find(subscription => !isTerminalSubscription(subscription.status)) ??
-        historical.data[0];
+      const allMatches = historical.data.filter(subscription => subscription.metadata?.user_id === userId);
+      const existing = allMatches.find(subscription => !isTerminalSubscription(subscription.status)) ?? allMatches[0];
       if (existing) {
         await syncSubscription(userId, existing.id);
         continue;
@@ -115,7 +121,14 @@ export async function openCheckout(userId: string, email: string, intent: Checko
       }
 
       if (session?.status === "expired" || session?.status === "complete" || now >= attempt.expiresAt) {
-        customerId ??= await usableCustomer(attempt.customerId);
+        const priorCustomer = await usableCustomer(attempt.customerId);
+        if (!session && attempt.trial && attempt.customerId && !priorCustomer && !introUsed) {
+          // A removed customer and an unrecoverable session cannot prove the
+          // original Checkout was abandoned. Keep the trial unavailable.
+          await storeCheckout(userId, lifecycle, attempt, true);
+          continue;
+        }
+        customerId ??= priorCustomer;
         attempt = null;
       }
     }

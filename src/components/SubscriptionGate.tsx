@@ -23,6 +23,11 @@ const billingCopy: Record<BillingAction, { title: string; detail: string; button
     detail: "Reactivate to regain access to your dashboard. Your $29 monthly subscription starts when you complete Checkout.",
     button: "Reactivate subscription",
   },
+  subscribe: {
+    title: "Subscribe to TrueAngle",
+    detail: "Your $29 monthly subscription starts when you complete Checkout. Contact support if you believe this account is eligible for an introductory trial.",
+    button: "Subscribe for $29 per month",
+  },
   recover: {
     title: "Review your payment information",
     detail: "Open billing to update your payment method or pay an outstanding invoice.",
@@ -107,7 +112,7 @@ function ProtectedPage({ children }: { children: React.ReactNode }) {
       const response = await fetch(action === "recover" ? "/api/stripe/portal" : "/api/stripe/start-trial", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify(action === "recover" ? { recovery: true } : { intent: action }),
+        body: JSON.stringify(action === "recover" ? { recovery: true } : { intent: action === "subscribe" ? "reactivate" : action }),
       });
       const data = await response.json();
       if (!response.ok || !data.url) throw new Error(data.error || "Could not open billing.");

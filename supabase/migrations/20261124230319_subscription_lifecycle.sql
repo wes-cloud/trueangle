@@ -3,6 +3,7 @@ begin;
 create table public.subscription_lifecycle (
   user_id uuid primary key references auth.users(id) on delete cascade,
   intro_used boolean not null default false,
+  legacy_unverified boolean not null default false,
   revision bigint not null default 0,
   checkout jsonb
 );
@@ -11,12 +12,45 @@ alter table public.subscription_lifecycle enable row level security;
 revoke all on public.subscription_lifecycle from public, anon, authenticated;
 grant select, insert, update on public.subscription_lifecycle to service_role;
 
--- A legacy subscription is evidence the account has already started billing.
-insert into public.subscription_lifecycle (user_id, intro_used)
-select user_id, true
-from public.subscriptions
-where stripe_subscription_id is not null or trial_end is not null
-   or status not in ('inactive');
+-- Existing accounts without durable billing evidence stay ineligible until reviewed.
+insert into public.subscription_lifecycle (user_id, intro_used, legacy_unverified)
+select u.id, evidence.found, not evidence.found
+from auth.users u
+left join public.subscriptions s on s.user_id = u.id
+cross join lateral (
+  select coalesce(s.stripe_subscription_id is not null or s.trial_end is not null
+    or s.status <> 'inactive', false) as found
+) evidence;
+
+-- Membership stays recorded when access expires. Downstream policies (such as
+-- vehicles) also stop seeing the ineligible delegated membership.
+create schema trueangle_private;
+revoke all on schema trueangle_private from public;
+grant usage on schema trueangle_private to authenticated;
+
+create function trueangle_private.has_delegated_company_access(p_company_id uuid)
+returns boolean
+language sql stable security definer set search_path = ''
+as $company_access$
+  select exists (
+    select 1
+    from public.company_members m
+    join public.companies c on c.id = m.company_id
+    join public.subscriptions s on s.user_id = c.owner_id
+    where m.company_id = p_company_id
+      and m.user_id = (select auth.uid())
+      and m.role in ('bookkeeper', 'viewer')
+      and (s.status = 'active' or (s.status = 'trialing' and s.trial_end > now()))
+  );
+$company_access$;
+
+revoke execute on function trueangle_private.has_delegated_company_access(uuid)
+  from public, anon, authenticated;
+grant execute on function trueangle_private.has_delegated_company_access(uuid) to authenticated;
+
+create policy delegated_membership_requires_entitlement
+on public.company_members as restrictive for select to authenticated
+using (role = 'owner' or trueangle_private.has_delegated_company_access(company_id));
 
 create function public.sync_stripe_subscription(
   p_user_id uuid,
@@ -69,7 +103,7 @@ begin
   end if;
 
   update public.subscription_lifecycle
-  set intro_used = true, revision = revision + 1
+  set intro_used = true, legacy_unverified = false, revision = revision + 1
   where user_id = p_user_id;
 
   return true;

@@ -1,49 +1,37 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { billingAdmin as supabaseAdmin, getBillingUser } from "@/lib/server/billing";
 import crypto from "crypto";
 import { Resend } from "resend";
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 const resend = new Resend(process.env.RESEND_API_KEY!);
 
 export async function POST(req: Request) {
   try {
-    const { email, ownerUserId } = await req.json();
+    const user = await getBillingUser(req);
+    if (!user) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
 
-    if (!email || !ownerUserId) {
+    const { email, companyId } = await req.json();
+
+    if (typeof email !== "string" || !email.trim()) {
       return NextResponse.json(
-        { error: "Missing email or owner user ID." },
+        { error: "Enter a valid email address." },
         { status: 400 }
       );
     }
 
-    const { data: ownerMemberships } = await supabaseAdmin
-      .from("company_members")
-      .select("company_id, role")
-      .eq("user_id", ownerUserId)
-      .eq("role", "owner")
-      .limit(1);
+    const ownedCompanies = supabaseAdmin.from("companies").select("id, name").eq("owner_id", user.id);
+    if (typeof companyId === "string" && companyId) ownedCompanies.eq("id", companyId);
+    const { data: company, error: ownerError } = await ownedCompanies.order("created_at").limit(1).maybeSingle();
+    if (ownerError) throw ownerError;
 
-    const ownerMembership = ownerMemberships?.[0];
-
-    if (!ownerMembership?.company_id) {
+    if (!company) {
       return NextResponse.json(
         { error: "Only company owners can send invites." },
         { status: 403 }
       );
     }
 
-    const { data: company } = await supabaseAdmin
-      .from("companies")
-      .select("name")
-      .eq("id", ownerMembership.company_id)
-      .maybeSingle();
-
-    const companyName = company?.name || "a contractor";
+    const companyName = company.name || "a contractor";
 
     const inviteToken = crypto.randomBytes(32).toString("hex");
     const cleanedEmail = email.trim().toLowerCase();
@@ -51,7 +39,7 @@ export async function POST(req: Request) {
     const { error: inviteError } = await supabaseAdmin
       .from("company_invites")
       .insert({
-        company_id: ownerMembership.company_id,
+        company_id: company.id,
         email: cleanedEmail,
         role: "bookkeeper",
         invite_token: inviteToken,

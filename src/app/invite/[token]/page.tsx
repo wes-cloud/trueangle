@@ -38,7 +38,7 @@ useEffect(() => {
 
     setInviteEmail(data.email || "");
     setStatus("ready");
-    setMessage("Create your free bookkeeper account.");
+    setMessage("Sign in or create an account to accept the invitation.");
   }
 
   if (token) {
@@ -47,36 +47,32 @@ useEffect(() => {
 }, [token]);
 
   async function handleAcceptInvite() {
-    if (!inviteEmail || !password) {
-      setMessage("Enter a password to finish creating your account.");
-      return;
-    }
-
+    if (!inviteEmail || working) return;
     setWorking(true);
-    setMessage("Creating account...");
+    setMessage("Checking account…");
 
     try {
-      const signUpResult = await supabase.auth.signUp({
-        email: inviteEmail,
-        password,
-      });
-
-      if (signUpResult.error) {
-        setMessage(signUpResult.error.message);
-        setWorking(false);
-        return;
+      const { data: auth } = await supabase.auth.getSession();
+      let session = auth.session;
+      if (session?.user.email?.toLowerCase() !== inviteEmail.toLowerCase()) {
+        if (!password) {
+          setMessage("Enter your password to sign in or create an account.");
+          return;
+        }
+        const signIn = await supabase.auth.signInWithPassword({ email: inviteEmail, password });
+        session = signIn.data.session;
+        if (signIn.error && !session) {
+          const signUp = await supabase.auth.signUp({
+            email: inviteEmail,
+            password,
+            options: { emailRedirectTo: window.location.origin },
+          });
+          if (signUp.error) throw new Error(signUp.error.message);
+          session = signUp.data.session;
+        }
       }
-
-      const signInResult = await supabase.auth.signInWithPassword({
-        email: inviteEmail,
-        password,
-      });
-
-      if (signInResult.error) {
-        setMessage(
-          "Account created. Please sign in from the login page to finish."
-        );
-        setWorking(false);
+      if (!session) {
+        setMessage("Confirm your email, then reopen this invitation to finish.");
         return;
       }
 
@@ -84,12 +80,9 @@ useEffect(() => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({
-          inviteToken: token,
-          email: inviteEmail,
-          userId: signInResult.data.user.id,
-        }),
+        body: JSON.stringify({ inviteToken: token }),
       });
 
       const data = await res.json();
@@ -106,7 +99,7 @@ useEffect(() => {
       window.location.href = "/dashboard";
     } catch (err) {
       console.error(err);
-      setMessage("Something went wrong accepting the invite.");
+      setMessage(err instanceof Error ? err.message : "Something went wrong accepting the invite.");
     } finally {
       setWorking(false);
     }
@@ -143,13 +136,13 @@ useEffect(() => {
 
             <div>
               <label className="mb-1 block text-sm font-bold text-slate-800">
-                Create Password
+                Password
               </label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Create a password"
+                autoComplete="current-password"
                 className="w-full rounded-xl border border-slate-300 bg-white p-3 text-slate-950"
               />
             </div>
@@ -167,7 +160,7 @@ useEffect(() => {
 
         {status === "accepted" && (
           <p className="mt-6 rounded-xl bg-green-50 p-4 text-sm font-bold text-green-900">
-            You're in. Redirecting...
+            Invitation accepted. Redirecting…
           </p>
         )}
       </div>

@@ -39,13 +39,14 @@ export type CheckoutAttempt = {
 
 export type Lifecycle = {
   intro_used: boolean;
+  legacy_unverified: boolean;
   revision: number;
   checkout: CheckoutAttempt | null;
 };
 
 export async function readLifecycle(userId: string): Promise<Lifecycle | null> {
   const { data, error } = await billingAdmin.from("subscription_lifecycle")
-    .select("intro_used, revision, checkout").eq("user_id", userId).maybeSingle();
+    .select("intro_used, legacy_unverified, revision, checkout").eq("user_id", userId).maybeSingle();
   if (error) throw error;
   return data;
 }
@@ -62,6 +63,20 @@ export async function readSubscription(userId: string) {
     .eq("user_id", userId).maybeSingle();
   if (error) throw error;
   return data;
+}
+
+export type SubscriptionRecord = NonNullable<Awaited<ReturnType<typeof readSubscription>>>;
+
+export async function findLinkedSubscriptionUser(subscriptionId: string) {
+  const { data, error } = await billingAdmin.from("subscriptions")
+    .select("user_id").eq("stripe_subscription_id", subscriptionId).maybeSingle();
+  if (error) throw error;
+  return data?.user_id as string | undefined;
+}
+
+export async function requireSubscriptionOwner(userId: string, subscription: Stripe.Subscription) {
+  const owner = subscription.metadata?.user_id ?? await findLinkedSubscriptionUser(subscription.id);
+  if (owner !== userId) throw new Error("Stripe subscription ownership mismatch");
 }
 
 export function stripeId(value: string | { id: string } | null | undefined) {
@@ -98,15 +113,13 @@ export async function syncSubscription(
       if (!deletedSnapshot && !deletedCustomerId) throw error;
       subscription = deletedSnapshot;
     }
-    if (subscription && subscription.metadata.user_id !== userId) {
-      throw new Error("Stripe subscription ownership mismatch");
-    }
+    if (subscription) await requireSubscriptionOwner(userId, subscription);
 
     const item = subscription?.items.data[0];
     const { data: saved, error: syncError } = await billingAdmin.rpc("sync_stripe_subscription", {
       p_user_id: userId,
       p_revision: lifecycle.revision,
-      p_checkout_id: subscription?.metadata.checkout_attempt ?? checkoutAttemptId ?? null,
+      p_checkout_id: subscription?.metadata?.checkout_attempt ?? checkoutAttemptId ?? null,
       p_subscription_id: subscriptionId,
       p_customer_id: stripeId(subscription?.customer) ?? deletedCustomerId,
       p_price_id: item?.price.id ?? null,

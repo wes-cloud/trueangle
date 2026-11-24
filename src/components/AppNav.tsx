@@ -64,10 +64,10 @@ export default function AppNav({ onSignOut }: AppNavProps) {
 
 async function loadRole() {
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
 
-  if (!user) {
+  if (!session) {
     setRoleLoaded(true);
     return;
   }
@@ -75,11 +75,8 @@ async function loadRole() {
   const res = await fetch("/api/company/list-access", {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.access_token}`,
     },
-    body: JSON.stringify({
-      userId: user.id,
-    }),
   });
 
   const data = await res.json();

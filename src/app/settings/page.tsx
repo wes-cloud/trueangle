@@ -112,15 +112,18 @@ async function handleAddBookkeeper() {
   setMessage("Creating invite...");
 
   try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      setMessage("You must be signed in.");
+      return;
+    }
     const res = await fetch("/api/company/send-invite", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify({
-        email: bookkeeperEmail.trim(),
-        ownerUserId: user.id,
-      }),
+      body: JSON.stringify({ email: bookkeeperEmail.trim(), companyId }),
     });
 
     const data = await res.json();

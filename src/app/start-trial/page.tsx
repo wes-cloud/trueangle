@@ -60,6 +60,11 @@ export default function StartTrialPage() {
         }
         throw new Error(result.error || "Unable to start your trial.");
       }
+      if (result.verificationRequired) {
+        setMessage("Check your email to confirm your account. Then sign in to start your trial.");
+        setLoading(false);
+        return;
+      }
       const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
       if (error) throw new Error("Your account was prepared, but sign-in failed. Please sign in to continue.");
       window.location.assign(result.url);

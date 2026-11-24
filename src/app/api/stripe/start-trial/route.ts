@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
-import { billingAdmin, getBillingUser } from "@/lib/server/billing";
+import { createClient } from "@supabase/supabase-js";
+import { getBillingUser } from "@/lib/server/billing";
 import { openCheckout } from "@/lib/server/checkout";
 
 export async function POST(request: Request) {
+  if (process.env.BILLING_CHECKOUT_PAUSED === "1") {
+    return NextResponse.json({ error: "Checkout is temporarily unavailable. Please try again later." }, { status: 503 });
+  }
   try {
     const { email: rawEmail, password, intent } = await request.json();
     let user = await getBillingUser(request);
@@ -14,12 +18,19 @@ export async function POST(request: Request) {
       if (!email || typeof password !== "string" || password.length < 8) {
         return NextResponse.json({ error: "Enter a valid email and password (at least 8 characters)." }, { status: 400 });
       }
-      const { data, error } = await billingAdmin.auth.admin.createUser({ email, password, email_confirm: true });
+      const auth = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      const { data, error } = await auth.auth.signUp({
+        email, password,
+        options: { emailRedirectTo: new URL("/auth", process.env.NEXT_PUBLIC_SITE_URL!).href },
+      });
       if (error || !data.user) {
         return NextResponse.json({
           error: "Unable to complete account setup. Please sign in or recover access if you have an account.",
         }, { status: 400 });
       }
+      if (!data.session) return NextResponse.json({ verificationRequired: true });
       user = data.user;
     }
     if (!user.email || (intent !== "trial" && intent !== "reactivate")) {

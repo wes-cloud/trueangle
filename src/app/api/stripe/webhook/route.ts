@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
-import { assertIsolatedBillingPreview, stripe, billingAdmin as supabaseAdmin, stripeId, syncSubscription } from "@/lib/server/billing";
+import { assertIsolatedBillingPreview, stripe, findLinkedSubscriptionUser, billingAdmin as supabaseAdmin, stripeId, syncSubscription } from "@/lib/server/billing";
 
 async function updateInvoiceStatus(invoiceId: string, userId: string) {
   const { data: invoice, error: invoiceError } = await supabaseAdmin
@@ -157,14 +157,17 @@ export async function POST(request: Request) {
     assertIsolatedBillingPreview();
     switch (event.type) {
       case "checkout.session.completed":
-      case "checkout.session.async_payment_succeeded": {
+      case "checkout.session.async_payment_succeeded":
+      case "checkout.session.async_payment_failed": {
         const session = event.data.object;
         if (event.type === "checkout.session.completed" && session.mode === "payment") {
           await saveInvoicePayment(session);
         }
-        const userId = session.metadata?.user_id;
         const id = stripeId(session.subscription);
-        if (session.mode === "subscription" && userId && id) await syncSubscription(userId, id);
+        if (session.mode === "subscription" && id) {
+          const userId = session.metadata?.user_id ?? await findLinkedSubscriptionUser(id);
+          if (userId) await syncSubscription(userId, id);
+        }
         break;
       }
       case "customer.subscription.created":
@@ -173,7 +176,7 @@ export async function POST(request: Request) {
       case "customer.subscription.paused":
       case "customer.subscription.resumed": {
         const subscription = event.data.object;
-        const userId = subscription.metadata.user_id;
+        const userId = subscription.metadata?.user_id ?? await findLinkedSubscriptionUser(subscription.id);
         if (userId) {
           await syncSubscription(userId, subscription.id,
             event.type === "customer.subscription.deleted" ? subscription : undefined);
@@ -181,12 +184,15 @@ export async function POST(request: Request) {
         break;
       }
       case "invoice.paid":
+      case "invoice.payment_succeeded":
       case "invoice.payment_failed": {
         const invoice = await stripe.invoices.retrieve(event.data.object.id);
         const details = invoice.parent?.subscription_details;
         const id = stripeId(details?.subscription);
-        const userId = details?.metadata?.user_id;
-        if (userId && id) await syncSubscription(userId, id);
+        if (id) {
+          const userId = details?.metadata?.user_id ?? await findLinkedSubscriptionUser(id);
+          if (userId) await syncSubscription(userId, id);
+        }
         break;
       }
       case "customer.deleted": {
