@@ -22,10 +22,10 @@ export default function CompanySwitcher() {
   useEffect(() => {
     async function loadCompanies() {
       const {
-        data: { user },
-      } = await supabase.auth.getUser();
+        data: { session },
+      } = await supabase.auth.getSession();
 
-      if (!user) {
+      if (!session) {
         setLoading(false);
         return;
       }
@@ -33,11 +33,8 @@ export default function CompanySwitcher() {
       const res = await fetch("/api/company/list-access", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({
-          userId: user.id,
-        }),
       });
 
       const data = await res.json();

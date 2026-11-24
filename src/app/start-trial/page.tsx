@@ -51,7 +51,7 @@ export default function StartTrialPage() {
       const response = await fetch("/api/stripe/start-trial", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), password })
+        body: JSON.stringify({ email: email.trim(), password, intent: "trial" })
       });
       const result = await response.json();
       if (!response.ok) {
@@ -59,6 +59,11 @@ export default function StartTrialPage() {
           throw new Error("We couldn't complete account setup with those details. If you already have an account, check your password or use password recovery.");
         }
         throw new Error(result.error || "Unable to start your trial.");
+      }
+      if (result.verificationRequired) {
+        setMessage("Check your email to confirm your account. Then sign in to start your trial.");
+        setLoading(false);
+        return;
       }
       const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
       if (error) throw new Error("Your account was prepared, but sign-in failed. Please sign in to continue.");
@@ -99,7 +104,7 @@ export default function StartTrialPage() {
           </form>
         )}
         {message && <p role="alert" className="mt-5 rounded-xl bg-amber-50 p-3 text-sm font-medium text-amber-950">{message}</p>}
-        <p className="mt-7 text-center text-xs leading-5 text-slate-500">Your account information is protected. Trial billing details are securely handled by Stripe.</p>
+        <p className="mt-7 text-center text-xs leading-5 text-slate-500">14 days free, then $29 per month unless you cancel before the trial ends. Stripe handles billing.</p>
       </section>
     </main>
   );

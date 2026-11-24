@@ -1,18 +1,16 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { billingAdmin as supabaseAdmin, getBillingUser } from "@/lib/server/billing";
 
 export async function POST(req: Request) {
   try {
-    const { inviteToken, email, userId } = await req.json();
+    const user = await getBillingUser(req);
+    if (!user) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
 
-    if (!inviteToken || !email || !userId) {
+    const { inviteToken } = await req.json();
+
+    if (typeof inviteToken !== "string" || !inviteToken || !user.email || !user.email_confirmed_at) {
       return NextResponse.json(
-        { error: "Missing invite token, email, or user ID." },
+        { error: "A verified account and an invite are required." },
         { status: 400 }
       );
     }
@@ -37,7 +35,7 @@ export async function POST(req: Request) {
       );
     }
 
-    if (invite.email.toLowerCase() !== email.toLowerCase()) {
+    if (invite.email.toLowerCase() !== user.email.toLowerCase()) {
       return NextResponse.json(
         { error: "Invite email does not match this account." },
         { status: 403 }
@@ -48,7 +46,7 @@ export async function POST(req: Request) {
       .from("company_members")
       .select("id")
       .eq("company_id", invite.company_id)
-      .eq("user_id", userId)
+      .eq("user_id", user.id)
       .limit(1);
 
     if (!existingMemberships || existingMemberships.length === 0) {
@@ -56,8 +54,8 @@ export async function POST(req: Request) {
         .from("company_members")
         .insert({
           company_id: invite.company_id,
-          user_id: userId,
-          role: invite.role || "bookkeeper",
+          user_id: user.id,
+          role: invite.role === "viewer" ? "viewer" : "bookkeeper",
         });
 
       if (memberError) {

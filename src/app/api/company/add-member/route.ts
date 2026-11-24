@@ -1,32 +1,26 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { billingAdmin as supabaseAdmin, getBillingUser } from "@/lib/server/billing";
 
 export async function POST(req: Request) {
   try {
-    const { email, ownerUserId } = await req.json();
+    const user = await getBillingUser(req);
+    if (!user) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
 
-    if (!email || !ownerUserId) {
+    const { email, companyId } = await req.json();
+
+    if (typeof email !== "string" || !email.trim()) {
       return NextResponse.json(
-        { error: "Missing email or owner user ID." },
+        { error: "Enter a valid email address." },
         { status: 400 }
       );
     }
 
-    const { data: ownerMemberships, error: ownerError } = await supabaseAdmin
-      .from("company_members")
-      .select("company_id, role")
-      .eq("user_id", ownerUserId)
-      .eq("role", "owner")
-      .limit(1);
+    const ownedCompanies = supabaseAdmin.from("companies").select("id").eq("owner_id", user.id);
+    if (typeof companyId === "string" && companyId) ownedCompanies.eq("id", companyId);
+    const { data: company, error: ownerError } = await ownedCompanies.order("created_at").limit(1).maybeSingle();
+    if (ownerError) throw ownerError;
 
-    const ownerMembership = ownerMemberships?.[0];
-
-    if (ownerError || !ownerMembership?.company_id) {
+    if (!company) {
       return NextResponse.json(
         { error: "Owner not associated with a company." },
         { status: 400 }
@@ -57,7 +51,7 @@ export async function POST(req: Request) {
     const { data: existing } = await supabaseAdmin
       .from("company_members")
       .select("id")
-      .eq("company_id", ownerMembership.company_id)
+      .eq("company_id", company.id)
       .eq("user_id", matchedUser.id)
       .limit(1);
 
@@ -71,7 +65,7 @@ export async function POST(req: Request) {
     const { data: existingBookkeepers } = await supabaseAdmin
       .from("company_members")
       .select("id")
-      .eq("company_id", ownerMembership.company_id)
+      .eq("company_id", company.id)
       .eq("role", "bookkeeper");
 
     if ((existingBookkeepers?.length || 0) >= 1) {
@@ -84,7 +78,7 @@ export async function POST(req: Request) {
     const { error: insertError } = await supabaseAdmin
       .from("company_members")
       .insert({
-        company_id: ownerMembership.company_id,
+        company_id: company.id,
         user_id: matchedUser.id,
         role: "bookkeeper",
       });
