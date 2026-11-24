@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 export default function TrialSuccessPage() {
-  const [message,setMessage]=useState("Verifying your trial...");
+  const [message,setMessage]=useState("Verifying your subscription…");
   useEffect(()=>{
     async function confirm() {
       try {
@@ -12,9 +12,9 @@ export default function TrialSuccessPage() {
         if (!session) { setMessage("Please sign in to finish setup."); return; }
         const res=await fetch("/api/stripe/confirm-trial",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${session.access_token}`},body:JSON.stringify({session_id:sessionId})});
         const data=await res.json();
-        if (!res.ok) throw new Error(data.error || "Unable to confirm trial.");
-        window.location.replace("/dashboard?trial=success");
-      } catch(error) { setMessage((error instanceof Error?error.message:"Unable to confirm trial.")+" Please contact support; do not start another checkout."); }
+        if (!res.ok) throw new Error(data.error || "Unable to confirm your subscription.");
+        window.location.replace("/dashboard");
+      } catch(error) { setMessage((error instanceof Error?error.message:"Unable to confirm trial.")+" Check your dashboard for the latest billing status."); }
     }
     confirm();
   },[]);

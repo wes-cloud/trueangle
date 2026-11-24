@@ -51,7 +51,7 @@ export default function StartTrialPage() {
       const response = await fetch("/api/stripe/start-trial", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), password })
+        body: JSON.stringify({ email: email.trim(), password, intent: "trial" })
       });
       const result = await response.json();
       if (!response.ok) {
@@ -99,7 +99,7 @@ export default function StartTrialPage() {
           </form>
         )}
         {message && <p role="alert" className="mt-5 rounded-xl bg-amber-50 p-3 text-sm font-medium text-amber-950">{message}</p>}
-        <p className="mt-7 text-center text-xs leading-5 text-slate-500">Your account information is protected. Trial billing details are securely handled by Stripe.</p>
+        <p className="mt-7 text-center text-xs leading-5 text-slate-500">14 days free, then $29 per month unless you cancel before the trial ends. Stripe handles billing.</p>
       </section>
     </main>
   );

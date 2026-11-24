@@ -72,11 +72,15 @@ export default function SettingsPage() {
     try {
       setMessage("Opening billing portal...");
 
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setMessage("Sign in to manage billing.");
+        return;
+      }
       const res = await fetch("/api/stripe/portal", {
         method: "POST",
-        body: JSON.stringify({
-          userId: user?.id,
-        }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({}),
       });
 
       const data = await res.json();

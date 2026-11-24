@@ -1,50 +1,27 @@
 import { NextResponse } from "next/server";
-import Stripe from "stripe";
-import { createClient } from "@supabase/supabase-js";
+import { getBillingUser, isMissingStripeResource, readSubscription, stripe } from "@/lib/server/billing";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
-    const { userId } = await req.json();
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: "Missing user ID." },
-        { status: 400 }
-      );
+    const user = await getBillingUser(request);
+    if (!user) return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
+    const subscription = await readSubscription(user.id);
+    if (!subscription?.stripe_customer_id) {
+      return NextResponse.json({ error: "No billing account was found. Please contact support." }, { status: 404 });
     }
 
-    const { data, error } = await supabaseAdmin
-      .from("subscriptions")
-      .select("stripe_customer_id")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    if (error || !data?.stripe_customer_id) {
-      return NextResponse.json(
-        { error: "No Stripe customer found for this account." },
-        { status: 400 }
-      );
-    }
-
+    const { recovery } = await request.json();
+    const site = new URL(process.env.NEXT_PUBLIC_SITE_URL!).origin;
     const session = await stripe.billingPortal.sessions.create({
-      customer: data.stripe_customer_id,
-      return_url: "https://trueangle.vercel.app/settings",
+      customer: subscription.stripe_customer_id,
+      return_url: `${site}/${recovery === true ? "dashboard" : "settings"}`,
     });
-
     return NextResponse.json({ url: session.url });
   } catch (error) {
-    console.error("Stripe portal error:", error);
-
-    return NextResponse.json(
-      { error: "Error creating portal session." },
-      { status: 500 }
-    );
+    if (isMissingStripeResource(error)) {
+      return NextResponse.json({ error: "This billing account is unavailable. Refresh your dashboard for current options." }, { status: 409 });
+    }
+    console.error("Stripe portal failed", error instanceof Error ? error.name : "unknown");
+    return NextResponse.json({ error: "Unable to open billing. Please try again or contact support." }, { status: 500 });
   }
 }

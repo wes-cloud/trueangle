@@ -1,74 +1,46 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { billingAction, hasSubscriptionAccess } from "@/lib/subscription-status";
+import { billingAdmin, getBillingUser, isMissingStripeResource, readLifecycle, readSubscription, stripe, syncSubscription } from "@/lib/server/billing";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
-    const { userId } = await req.json();
+    const user = await getBillingUser(request);
+    if (!user) return NextResponse.json({ allowed: false }, { status: 401 });
 
-    if (!userId) {
-      return NextResponse.json({ allowed: false });
+    let subscription = await readSubscription(user.id);
+    if (hasSubscriptionAccess(subscription)) return NextResponse.json({ allowed: true });
+
+    // Keep company member access independent of the member's own subscription.
+    const { data: membership, error } = await billingAdmin.from("company_members")
+      .select("role").eq("user_id", user.id).neq("role", "owner").limit(1).maybeSingle();
+    if (error) throw error;
+    if (membership) return NextResponse.json({ allowed: true });
+
+    if (subscription?.stripe_subscription_id &&
+        (subscription.status === "trialing" || subscription.status === "incomplete" ||
+         subscription.status === "past_due" || subscription.status === "unpaid" || subscription.status === "paused")) {
+      const customerId = subscription.stripe_customer_id;
+      let deletedCustomerId: string | undefined;
+      if (customerId) {
+        try {
+          if ((await stripe.customers.retrieve(customerId)).deleted) deletedCustomerId = customerId;
+        } catch (error) {
+          if (!isMissingStripeResource(error)) throw error;
+          deletedCustomerId = customerId;
+        }
+      }
+      await syncSubscription(user.id, subscription.stripe_subscription_id, undefined, deletedCustomerId);
+      subscription = await readSubscription(user.id);
+      if (hasSubscriptionAccess(subscription)) return NextResponse.json({ allowed: true });
     }
 
-    const { data: ownSubscription } = await supabaseAdmin
-      .from("subscriptions")
-      .select("status")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    if (
-      ownSubscription?.status === "trialing" ||
-      ownSubscription?.status === "active"
-    ) {
-      return NextResponse.json({ allowed: true, role: "owner" });
-    }
-
-    const { data: memberships } = await supabaseAdmin
-      .from("company_members")
-      .select("company_id, role")
-      .eq("user_id", userId)
-      .limit(1);
-
-    const membership = memberships?.[0];
-
-    if (!membership?.company_id) {
-      return NextResponse.json({ allowed: false });
-    }
-
-    const { data: owners } = await supabaseAdmin
-      .from("company_members")
-      .select("user_id")
-      .eq("company_id", membership.company_id)
-      .eq("role", "owner")
-      .limit(1);
-
-    const ownerUserId = owners?.[0]?.user_id;
-
-    if (!ownerUserId) {
-      return NextResponse.json({ allowed: false });
-    }
-
-    const { data: ownerSubscription } = await supabaseAdmin
-      .from("subscriptions")
-      .select("status")
-      .eq("user_id", ownerUserId)
-      .maybeSingle();
-
-    const allowed =
-      ownerSubscription?.status === "trialing" ||
-      ownerSubscription?.status === "active";
-
+    const lifecycle = await readLifecycle(user.id);
     return NextResponse.json({
-      allowed,
-      role: membership.role,
-      companyId: membership.company_id,
+      allowed: false,
+      action: billingAction(subscription, lifecycle?.intro_used ?? false),
     });
   } catch (error) {
-    console.error("Access check error:", error);
+    console.error("Access check failed", error instanceof Error ? error.name : "unknown");
     return NextResponse.json({ allowed: false }, { status: 500 });
   }
 }
